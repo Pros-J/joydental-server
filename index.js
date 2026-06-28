@@ -333,7 +333,7 @@ app.post('/api/sms', requireAuth, async (req, res) => {
       to: to.replace(/[^0-9]/g, ''),
       from,
       text,
-      type: text.length > 90 ? 'LMS' : 'SMS'
+      type: 'LMS'
     });
     res.json({ ok: true });
   } catch (err) {
