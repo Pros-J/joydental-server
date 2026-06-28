@@ -2581,7 +2581,7 @@ const Pages = {
     const s = DB.getSettings();
     const handle = `<span class="drag-handle" title="드래그해서 순서 변경">⠿</span>`;
 
-    const labRows = s.labs.map((l,i) => `
+    const labRows = (s.labs||[]).map((l,i) => `
       <div class="s-item" draggable="true" data-list="labs" data-idx="${i}">
         ${handle}
         <div class="name">${l.name}</div>

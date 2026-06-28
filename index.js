@@ -289,11 +289,12 @@ app.post('/api/reset-password', async (req, res) => {
     return res.status(400).json({ ok: false, error: '인증코드가 틀렸습니다.' });
   }
 
-  // 비밀번호 변경 — DB settings 업데이트
+  // 비밀번호 변경 — DB settings 업데이트 (기존 데이터 보존)
   if (pool) {
     try {
       const result = await pool.query("SELECT value FROM kv_store WHERE key = 'dc_settings'");
-      let settings = result.rows.length > 0 ? result.rows[0].value : {};
+      // 기존 settings 전체를 읽어서 credentials만 업데이트 (labs 등 다른 데이터 보존)
+      let settings = (result.rows.length > 0 && result.rows[0].value) ? result.rows[0].value : {};
       if (!settings.credentials) settings.credentials = {};
       if (role === 'admin') settings.credentials.adminPassword = newPassword;
       else settings.credentials.staffPassword = newPassword;
