@@ -807,10 +807,10 @@ const Pages = {
     const implantOrders = DB.getImplantOrders().filter(r => inMonth(r.date, y, m));
     const generalOrders = DB.getGeneralOrders().filter(r => inMonth(r.date, y, m));
     const labWork = DB.getLabWork().filter(r => inMonth(r.date, y, m));
-    const fixtures = DB.getFixtures();
+    const allFixtures = DB.getFixtures();
     // 페일 픽스쳐 중 반품 완료된 항목 — 비용 차감용
     const failReturned = DB.getFixtureUsage().filter(r => inMonth(r.date, y, m) && r.fail && r.return_status === '반품 완료');
-    const failReturnedCost = sum(failReturned, r => { const f = fixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; });
+    const failReturnedCost = sum(failReturned, r => { const f = allFixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; });
 
     const totalDirect = sum(direct, r => r.amount);
     // 반품완료 주문 항목 제외 + 페일 픽스쳐 반품 완료 차감
