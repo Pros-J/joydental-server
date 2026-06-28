@@ -2077,7 +2077,7 @@ const Pages = {
           let name = '';
           if (r.item_type === 'fixture') {
             const fx = DB.getFixtures().find(x => x.id === r.item_id);
-            if (fx) name = `${fx.company} 픽스쳐 ${fx.diameter}x${fx.length}mm`;
+            if (fx) name = `${fx.company} 픽스쳐 ${fx.fixture_type||''} ${fx.diameter}x${fx.length}mm`.replace(/\s+/g,' ').trim();
           } else if (r.item_type === 'mat') {
             const mt = DB.getImplantMaterials().find(x => x.id === r.item_id);
             if (mt) name = `${mt.category} ${mt.name}`;
