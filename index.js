@@ -11,13 +11,11 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET  = process.env.JWT_SECRET  || 'change-this-secret-in-production';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'showtime36@naver.com';
 
-// ── 네이버 메일 발송 ─────────────────────────────────────────
-const mailer = process.env.NAVER_ID && process.env.NAVER_PW
+// ── Gmail 발송 ───────────────────────────────────────────────
+const mailer = process.env.GMAIL_USER && process.env.GMAIL_APP_PW
   ? nodemailer.createTransport({
-      host: 'smtp.naver.com',
-      port: 465,
-      secure: true,
-      auth: { user: process.env.NAVER_ID, pass: process.env.NAVER_PW }
+      service: 'gmail',
+      auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PW }
     })
   : null;
 
@@ -27,7 +25,7 @@ const resetCodes = new Map(); // email → { code, expiresAt }
 function sendResetEmail(code) {
   if (!mailer) return Promise.reject(new Error('메일 설정이 없습니다.'));
   return mailer.sendMail({
-    from: `"조이치과 관리 시스템" <${process.env.NAVER_ID}@naver.com>`,
+    from: `"조이치과 관리 시스템" <${process.env.GMAIL_USER}>`,
     to: ADMIN_EMAIL,
     subject: '[조이치과] 비밀번호 재설정 인증코드',
     html: `
