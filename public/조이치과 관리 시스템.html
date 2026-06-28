@@ -2873,8 +2873,8 @@ const Pages = {
       const rows = vendors.map((v,i) => `
         <div class="s-item" draggable="true" data-list="vendors_${cat}" data-idx="${i}" data-vid="${v.id}" data-gidx="${v._gi}">
           ${handle}
-          <div class="name">${v.name}</div>
-          <div class="sub">${[v.manager, v.phone].filter(Boolean).join(' · ')}</div>
+          <div class="name">${v.name}${v.online_order?` <span class="badge" style="background:#dbeafe;color:#1d4ed8;font-size:10px">온라인</span>`:''}</div>
+          <div class="sub">${v.online_order ? '온라인 주문' : [v.manager, v.phone].filter(Boolean).join(' · ')}</div>
           <button class="btn btn-secondary btn-sm" onclick="Pages.editVendorModal(${v.id})">수정</button>
           <button class="btn btn-danger btn-sm" onclick="Pages.deleteVendor(${v.id})">삭제</button>
         </div>`).join('') || `<div style="color:var(--gray-400);font-size:12px;padding:4px 0">없음</div>`;
@@ -3390,7 +3390,7 @@ const Pages = {
         <div class="item-row">
           <span class="badge badge-gray" style="min-width:60px;text-align:center">${v.category}</span>
           <span style="flex:1;font-weight:500">${v.name}</span>
-          <span style="color:var(--gray-400);font-size:12px;min-width:120px">${[v.manager, v.phone].filter(Boolean).join(' · ')}</span>
+          <span style="color:var(--gray-400);font-size:12px;min-width:120px">${v.online_order ? '<span style="color:#1d4ed8">온라인 주문</span>' : [v.manager, v.phone].filter(Boolean).join(' · ')}</span>
           <button class="btn btn-secondary btn-sm" onclick="Pages.editVendorModal(${v.id})">수정</button>
           <button class="btn btn-danger btn-sm" onclick="Pages.deleteVendor(${v.id})">삭제</button>
         </div>`).join('');
@@ -3414,10 +3414,16 @@ const Pages = {
             <div id="vendor-cat-hint" style="font-size:11px;color:var(--primary);margin-top:3px">${catDesc[activeCat]||''}</div>
           </div>
           <div class="form-group"><label>거래처명</label><input type="text" name="name" value="${v?.name||''}" required placeholder="거래처명"></div>
-          <div class="form-group"><label>담당자명</label><input type="text" name="manager" value="${v?.manager||''}" placeholder="담당자 이름"></div>
+          <div class="form-group" style="display:flex;align-items:center;padding-top:22px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+              <input type="checkbox" id="vendor-online-chk" name="online_order" value="1" ${v?.online_order?'checked':''} onchange="Pages._toggleVendorOnline(this.checked)" style="width:16px;height:16px;accent-color:var(--primary)">
+              온라인 주문
+            </label>
+          </div>
+          <div class="form-group"><label>담당자명</label><input id="vendor-manager" type="text" name="manager" value="${v?.manager||''}" placeholder="담당자 이름" ${v?.online_order?'disabled':''}></div>
           <div class="form-group" style="grid-column:1/-1">
             <label>연락처 <span style="font-weight:400;color:var(--gray-400);font-size:11px">— 띄어쓰기·특수기호 없이 숫자만 입력 (예: 01012345678)</span></label>
-            <input type="text" name="phone" value="${v?.phone||''}" placeholder="01012345678" inputmode="numeric">
+            <input id="vendor-phone" type="text" name="phone" value="${v?.phone||''}" placeholder="01012345678" inputmode="numeric" ${v?.online_order?'disabled':''}>
           </div>
           <div class="form-group" style="grid-column:1/-1"><label>메모</label><input type="text" name="note" value="${v?.note||''}" placeholder="추가 메모"></div>
         </div>
@@ -3429,11 +3435,18 @@ const Pages = {
     </div>`);
   },
   editVendorModal(id) { this.addVendorModal(id, null); },
+  _toggleVendorOnline(checked) {
+    const mgr = document.getElementById('vendor-manager');
+    const ph  = document.getElementById('vendor-phone');
+    if (mgr) mgr.disabled = checked;
+    if (ph)  ph.disabled  = checked;
+  },
   saveVendor(e, editId) {
     e.preventDefault();
     const f = new FormData(e.target);
     const vendors = DB.getVendors();
-    const item = { category: f.get('category'), name: f.get('name'), manager: f.get('manager'), phone: f.get('phone'), note: f.get('note') };
+    const online = !!f.get('online_order');
+    const item = { category: f.get('category'), name: f.get('name'), online_order: online, manager: online ? '' : (f.get('manager')||''), phone: online ? '' : (f.get('phone')||''), note: f.get('note') };
     if (editId) {
       const idx = vendors.findIndex(v => v.id === editId);
       if (idx >= 0) vendors[idx] = { ...vendors[idx], ...item };
