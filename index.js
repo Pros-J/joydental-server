@@ -14,7 +14,9 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'showtime36@naver.com';
 // ── Gmail 발송 ───────────────────────────────────────────────
 const mailer = process.env.GMAIL_USER && process.env.GMAIL_APP_PW
   ? nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
       auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PW },
       connectionTimeout: 10000,
       greetingTimeout: 10000,
