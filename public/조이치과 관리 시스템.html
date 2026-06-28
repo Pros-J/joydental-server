@@ -577,16 +577,19 @@ const Auth = {
     msg.style.color = 'var(--gray-600)';
     msg.textContent = '발송 중...';
     try {
-      const res  = await fetch(`${SERVER_URL}/api/forgot-password`, { method: 'POST' });
+      const res  = await fetch(`${SERVER_URL}/api/forgot-password`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(20000)
+      });
       const data = await res.json();
       if (!data.ok) { msg.style.color='var(--red)'; msg.textContent = data.error; return; }
       msg.style.color = 'var(--green)';
       msg.textContent = data.message;
       document.getElementById('fp-step1').style.display = 'none';
       document.getElementById('fp-step2').style.display = 'block';
-    } catch {
+    } catch (err) {
       msg.style.color = 'var(--red)';
-      msg.textContent = '서버 연결 실패';
+      msg.textContent = err.name === 'TimeoutError' ? '서버 응답 시간 초과. 다시 시도해주세요.' : '서버 연결 실패: ' + err.message;
     }
   },
 
