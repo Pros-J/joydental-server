@@ -2073,7 +2073,19 @@ const Pages = {
       const phone = vendorInfo?.phone;
       console.log('[SMS] 거래처:', vendor, '/ 전화:', phone, '/ 벤더정보:', vendorInfo);
       if (phone) {
-        const itemLines = group.map(r => `- ${r.item_name || r.description || ''} ${r.quantity}개`).join('\n');
+        const itemLines = group.map(r => {
+          let name = r.item_name || '';
+          if (!name) {
+            if (r.item_type === 'fixture') {
+              const fx = DB.getFixtures().find(x => x.id === r.item_id);
+              if (fx) name = `[${fx.company}] 픽스쳐 ${fx.diameter}×${fx.length}mm`;
+            } else if (r.item_type === 'mat') {
+              const mt = DB.getImplantMaterials().find(x => x.id === r.item_id);
+              if (mt) name = `[${mt.category}] ${mt.name}`;
+            }
+          }
+          return `- ${name || r.description || '품목'} ${r.quantity}개`;
+        }).join('\n');
         const total = group.reduce((s, r) => s + (r.total || 0), 0);
         const text = `[조이치과] 주문서 발행\n거래처: ${vendor}\n날짜: ${date}\n\n${itemLines}${total ? '\n\n합계: ' + total.toLocaleString() + '원' : ''}`;
         fetch(`${SERVER_URL}/api/sms`, {
