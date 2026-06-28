@@ -1,13 +1,47 @@
 require('dotenv').config();
-const express = require('express');
-const cors    = require('cors');
-const jwt     = require('jsonwebtoken');
-const { Pool } = require('pg');
-const path    = require('path');
+const express    = require('express');
+const cors       = require('cors');
+const jwt        = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const { Pool }   = require('pg');
+const path       = require('path');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
+const JWT_SECRET  = process.env.JWT_SECRET  || 'change-this-secret-in-production';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'showtime36@naver.com';
+
+// ── 네이버 메일 발송 ─────────────────────────────────────────
+const mailer = process.env.NAVER_ID && process.env.NAVER_PW
+  ? nodemailer.createTransport({
+      host: 'smtp.naver.com',
+      port: 465,
+      secure: true,
+      auth: { user: process.env.NAVER_ID, pass: process.env.NAVER_PW }
+    })
+  : null;
+
+// 인증코드 임시 저장 (메모리, 30분 유효)
+const resetCodes = new Map(); // email → { code, expiresAt }
+
+function sendResetEmail(code) {
+  if (!mailer) return Promise.reject(new Error('메일 설정이 없습니다.'));
+  return mailer.sendMail({
+    from: `"조이치과 관리 시스템" <${process.env.NAVER_ID}@naver.com>`,
+    to: ADMIN_EMAIL,
+    subject: '[조이치과] 비밀번호 재설정 인증코드',
+    html: `
+      <div style="font-family:sans-serif;max-width:400px;margin:0 auto">
+        <h2 style="color:#2563eb">조이치과 관리 시스템</h2>
+        <p>비밀번호 재설정 인증코드입니다.</p>
+        <div style="font-size:32px;font-weight:bold;letter-spacing:8px;
+                    background:#f3f4f6;padding:20px;text-align:center;
+                    border-radius:8px;margin:20px 0">${code}</div>
+        <p style="color:#6b7280;font-size:13px">이 코드는 30분간 유효합니다.<br>
+        본인이 요청하지 않은 경우 무시하세요.</p>
+      </div>`
+  });
+}
 
 // ── DB 연결 ──────────────────────────────────────────────────
 const pool = process.env.DATABASE_URL ? new Pool({
@@ -151,6 +185,63 @@ app.delete('/api/data', requireAuth, requireAdmin, async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
+});
+
+// ── 비밀번호 찾기 ────────────────────────────────────────────
+
+// 1단계: 인증코드 발송
+app.post('/api/forgot-password', async (req, res) => {
+  if (!mailer) return res.status(503).json({ ok: false, error: '메일 서비스가 설정되지 않았습니다.' });
+
+  // 6자리 숫자 코드 생성
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  resetCodes.set(ADMIN_EMAIL, { code, expiresAt: Date.now() + 30 * 60 * 1000 });
+
+  try {
+    await sendResetEmail(code);
+    res.json({ ok: true, message: `${ADMIN_EMAIL}로 인증코드를 발송했습니다.` });
+  } catch (err) {
+    console.error('메일 발송 실패:', err);
+    res.status(500).json({ ok: false, error: '메일 발송에 실패했습니다. 네이버 설정을 확인하세요.' });
+  }
+});
+
+// 2단계: 코드 확인 후 비밀번호 변경
+app.post('/api/reset-password', async (req, res) => {
+  const { code, newPassword, role } = req.body;
+  if (!code || !newPassword || !role) {
+    return res.status(400).json({ ok: false, error: '필수 항목이 누락됐습니다.' });
+  }
+
+  const saved = resetCodes.get(ADMIN_EMAIL);
+  if (!saved) return res.status(400).json({ ok: false, error: '인증코드를 먼저 요청하세요.' });
+  if (Date.now() > saved.expiresAt) {
+    resetCodes.delete(ADMIN_EMAIL);
+    return res.status(400).json({ ok: false, error: '인증코드가 만료됐습니다. 다시 요청하세요.' });
+  }
+  if (saved.code !== code.trim()) {
+    return res.status(400).json({ ok: false, error: '인증코드가 틀렸습니다.' });
+  }
+
+  // 비밀번호 변경 — DB settings 업데이트
+  if (pool) {
+    try {
+      const result = await pool.query("SELECT value FROM kv_store WHERE key = 'dc_settings'");
+      let settings = result.rows.length > 0 ? result.rows[0].value : {};
+      if (!settings.credentials) settings.credentials = {};
+      if (role === 'admin') settings.credentials.adminPassword = newPassword;
+      else settings.credentials.staffPassword = newPassword;
+      await pool.query(`
+        INSERT INTO kv_store (key, value, updated_at) VALUES ('dc_settings', $1, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+      `, [JSON.stringify(settings)]);
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: 'DB 저장 실패: ' + err.message });
+    }
+  }
+
+  resetCodes.delete(ADMIN_EMAIL);
+  res.json({ ok: true, message: '비밀번호가 변경됐습니다.' });
 });
 
 // 헬스 체크
