@@ -2081,7 +2081,7 @@ const Pages = {
             if (fx) name = `${fx.company} 픽스쳐 ${fx.fixture_type||''} ${fx.diameter}x${fx.length}mm`.replace(/\s+/g,' ').trim();
           } else if (r.item_type === 'mat') {
             const mt = DB.getImplantMaterials().find(x => x.id == r.item_id);
-            if (mt) name = `${mt.category} ${mt.name}`;
+            if (mt) name = `${mt.category} ${mt.name}${mt.spec ? ' ' + mt.spec : ''}`;
           }
           if (!name) name = (r.item_name || r.description || '품목').replace(/[\[\]]/g, '');
           return `- ${name} ${r.quantity}개`;
