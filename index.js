@@ -5,6 +5,7 @@ const jwt        = require('jsonwebtoken');
 const https = require('https');
 const { Pool }   = require('pg');
 const path       = require('path');
+const coolsms    = require('coolsms-node-sdk').default;
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -310,6 +311,34 @@ app.post('/api/reset-password', async (req, res) => {
   resetCodes.delete(ADMIN_EMAIL);
   resetAttempts(role); // 비밀번호 재설정 시 잠금 해제
   res.json({ ok: true, message: '비밀번호가 변경됐습니다.' });
+});
+
+// ── SMS 발송 ─────────────────────────────────────────────────
+app.post('/api/sms', requireAuth, async (req, res) => {
+  const { to, text } = req.body;
+  if (!to || !text) return res.status(400).json({ ok: false, error: '수신번호와 내용이 필요합니다.' });
+
+  const apiKey    = process.env.COOLSMS_API_KEY;
+  const apiSecret = process.env.COOLSMS_API_SECRET;
+  const from      = process.env.COOLSMS_SENDER;
+
+  if (!apiKey || !apiSecret || !from) {
+    return res.status(503).json({ ok: false, error: 'SMS 설정이 없습니다.' });
+  }
+
+  try {
+    const messageService = new coolsms(apiKey, apiSecret);
+    await messageService.sendOne({
+      to: to.replace(/[^0-9]/g, ''),
+      from,
+      text,
+      type: text.length > 90 ? 'LMS' : 'SMS'
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('SMS 발송 실패:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // 헬스 체크

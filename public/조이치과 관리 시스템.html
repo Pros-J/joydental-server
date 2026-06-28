@@ -2325,8 +2325,29 @@ const Pages = {
 
   publishGeneralGroup(gid) {
     const data = DB.getGeneralOrders();
-    data.filter(r => r.order_group_id === gid).forEach(r => { r.status = '주문서 발행 완료'; });
+    const group = data.filter(r => r.order_group_id === gid);
+    group.forEach(r => { r.status = '주문서 발행 완료'; });
     DB.saveGeneralOrders(data);
+
+    // SMS 발송
+    if (group.length) {
+      const { vendor, date } = group[0];
+      const vendorInfo = DB.getVendors().find(v => v.name === vendor);
+      const phone = vendorInfo?.phone;
+      if (phone) {
+        const itemLines = group.map(r => `- ${r.description} ${r.quantity}개`).join('\n');
+        const total = group.reduce((s, r) => s + (r.total_amount || 0), 0);
+        const text = `[조이치과] 주문서 발행\n거래처: ${vendor}\n날짜: ${date}\n\n${itemLines}${total ? '\n\n합계: ' + total.toLocaleString() + '원' : ''}`;
+        fetch(`${SERVER_URL}/api/sms`, {
+          method: 'POST',
+          headers: { ...DB._authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: phone, text })
+        }).then(r => r.json()).then(r => {
+          if (!r.ok) console.warn('SMS 발송 실패:', r.error);
+        }).catch(err => console.warn('SMS 오류:', err));
+      }
+    }
+
     Pages.general(App.year, App.month);
   },
 
