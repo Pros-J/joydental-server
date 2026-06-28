@@ -389,6 +389,8 @@ const DB = {
     const saved = this._get('dc_settings');
     if (!saved) return defaults;
     // 새 키 누락 보완
+    if (!saved.labs) saved.labs = defaults.labs;
+    if (!saved.directCategories) saved.directCategories = defaults.directCategories;
     if (!saved.fixtureCompanies) saved.fixtureCompanies = defaults.fixtureCompanies;
     if (!saved.prostheticTypes) saved.prostheticTypes = defaults.prostheticTypes;
     if (!saved.implantMatCategories) saved.implantMatCategories = defaults.implantMatCategories;
