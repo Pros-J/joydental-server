@@ -2071,7 +2071,7 @@ const Pages = {
       const { vendor, date } = group[0];
       const vendorInfo = DB.getVendors().find(v => v.name === vendor);
       const phone = vendorInfo?.phone;
-      console.log('[SMS] 거래처:', vendor, '/ 전화:', phone, '/ 벤더정보:', vendorInfo);
+      console.log('[SMS] 거래처:', vendor, '/ 전화:', phone, '/ 그룹 첫 품목:', JSON.stringify(group[0]));
       if (phone) {
         const itemLines = group.map(r => {
           let name = r.item_name || '';
