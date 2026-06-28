@@ -1,0 +1,3138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>조이치과 관리 시스템</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --primary-light: #eff6ff;
+    --sidebar-w: 220px;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-400: #9ca3af;
+    --gray-600: #4b5563;
+    --gray-800: #1f2937;
+    --red: #ef4444;
+    --red-light: #fef2f2;
+    --green: #16a34a;
+    --green-light: #f0fdf4;
+    --yellow: #d97706;
+    --yellow-light: #fffbeb;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,.1);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.12);
+  }
+
+  body { font-family: 'Segoe UI', -apple-system, sans-serif; background: var(--gray-50); color: var(--gray-800); display: flex; min-height: 100vh; font-size: 14px; }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width: var(--sidebar-w); min-height: 100vh; background: #1e3a5f;
+    color: #fff; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; z-index: 100;
+  }
+  #sidebar .logo { padding: 20px 16px 16px; font-size: 15px; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,.12); line-height: 1.4; }
+  #sidebar .logo span { font-size: 11px; font-weight: 400; opacity: .7; display: block; margin-top: 2px; }
+  #sidebar nav { flex: 1; padding: 8px 0; overflow-y: auto; }
+  #sidebar nav .section-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; opacity: .45; padding: 14px 16px 4px; }
+  #sidebar nav a {
+    display: flex; align-items: center; gap: 9px; padding: 9px 16px;
+    color: rgba(255,255,255,.75); text-decoration: none; font-size: 13.5px; cursor: pointer;
+    transition: background .15s, color .15s; border-radius: 0;
+  }
+  #sidebar nav a:hover { background: rgba(255,255,255,.08); color: #fff; }
+  #sidebar nav a.active { background: var(--primary); color: #fff; }
+  #sidebar nav a .icon { font-size: 16px; width: 20px; text-align: center; }
+  #sidebar .footer { padding: 12px 16px; font-size: 11px; opacity: .4; border-top: 1px solid rgba(255,255,255,.1); }
+
+  /* ── MAIN ── */
+  #main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  #topbar { background: #fff; border-bottom: 1px solid var(--gray-200); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+  #topbar h1 { font-size: 18px; font-weight: 600; }
+  #topbar .month-nav { display: flex; align-items: center; gap: 8px; }
+  #topbar .month-nav button { background: var(--gray-100); border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  #topbar .month-nav button:hover { background: var(--gray-200); }
+  #topbar .month-nav span { font-weight: 600; min-width: 80px; text-align: center; }
+
+  #content { padding: 24px; flex: 1; }
+
+  /* ── CARDS ── */
+  .card { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .card-title { font-size: 15px; font-weight: 600; }
+
+  /* ── STAT CARDS ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat-card { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
+  .stat-card .label { font-size: 12px; color: var(--gray-600); margin-bottom: 6px; }
+  .stat-card .value { font-size: 22px; font-weight: 700; }
+  .stat-card .sub { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+  .stat-card.blue .value { color: var(--primary); }
+  .stat-card.red .value { color: var(--red); }
+  .stat-card.green .value { color: var(--green); }
+  .stat-card.yellow .value { color: var(--yellow); }
+
+  /* ── TABLES ── */
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: var(--gray-50); padding: 9px 10px; text-align: left; font-weight: 600; color: var(--gray-600); border-bottom: 1px solid var(--gray-200); white-space: nowrap; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--gray-50); }
+  .tbl-empty { text-align: center; padding: 40px; color: var(--gray-400); font-size: 13px; }
+
+  /* ── BUTTONS ── */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: background .15s; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-secondary { background: var(--gray-100); color: var(--gray-800); }
+  .btn-secondary:hover { background: var(--gray-200); }
+  .btn-danger { background: var(--red-light); color: var(--red); }
+  .btn-danger:hover { background: #fecaca; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-ghost { background: none; color: var(--gray-600); border: 1px solid var(--gray-200); }
+  .btn-ghost:hover { background: var(--gray-100); }
+
+  /* ── BADGES ── */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .badge-blue { background: #dbeafe; color: #1d4ed8; }
+  .badge-green { background: #dcfce7; color: #15803d; }
+  .badge-red { background: #fee2e2; color: #dc2626; }
+  .badge-orange { background: #fed7aa; color: #c2410c; }
+  .badge-green  { background: #bbf7d0; color: #15803d; }
+  .status-order    { background: #fff7ed; border-left: 3px solid #f97316; }
+  .status-received { background: #f0fdf4; border-left: 3px solid #22c55e; }
+  .badge-yellow { background: #fef9c3; color: #854d0e; }
+  .badge-gray { background: var(--gray-100); color: var(--gray-600); }
+
+  /* ── FORMS ── */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 12px; font-weight: 600; color: var(--gray-600); }
+  .form-group input, .form-group select, .form-group textarea {
+    padding: 8px 10px; border: 1px solid var(--gray-200); border-radius: 6px;
+    font-size: 13px; font-family: inherit; background: #fff;
+    transition: border-color .15s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+  }
+  .form-group textarea { resize: vertical; min-height: 70px; }
+  .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-100); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal { background: #fff; border-radius: 10px; padding: 24px; width: 100%; max-width: 580px; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-md); }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; }
+  .modal-title small { font-size: 12px; font-weight: 400; color: var(--gray-400); margin-left: 6px; }
+
+  /* ── TABS ── */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--gray-200); margin-bottom: 20px; }
+  .tab { padding: 8px 16px; cursor: pointer; border: none; background: none; font-size: 13.5px; color: var(--gray-600); border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab:hover:not(.active) { color: var(--gray-800); }
+
+  /* ── FILTER BAR ── */
+  .filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .filter-bar select, .filter-bar input { padding: 7px 10px; border: 1px solid var(--gray-200); border-radius: 6px; font-size: 13px; background: #fff; }
+
+  /* ── STOCK INDICATOR ── */
+  .stock-ok { color: var(--green); font-weight: 600; }
+  .stock-low { color: var(--yellow); font-weight: 600; }
+  .stock-zero { color: var(--red); font-weight: 600; }
+
+  /* ── ALERTS ── */
+  .alert { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; }
+  .alert-warning { background: var(--yellow-light); color: #92400e; border-left: 3px solid var(--yellow); }
+  .alert-info { background: var(--primary-light); color: #1e40af; border-left: 3px solid var(--primary); }
+
+  /* ── PROGRESS ── */
+  .progress-bar { background: var(--gray-200); border-radius: 99px; height: 6px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 99px; background: var(--primary); }
+
+  /* ── SETTINGS BANNERS ── */
+  .s-banner { margin-bottom: 20px; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .s-banner-hd { padding: 11px 18px; font-weight: 700; font-size: 13.5px; color: #fff; display: flex; align-items: center; gap: 8px; }
+  .s-banner-hd.blue  { background: #1d4ed8; }
+  .s-banner-hd.green { background: #15803d; }
+  .s-banner-hd.purple{ background: #6d28d9; }
+  .s-banner-hd.orange{ background: #b45309; }
+  .s-banner-hd.dark  { background: #374151; }
+  .s-banner-bd { background: #fff; padding: 16px; }
+  .s-banner-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .s-block { border: 1px solid var(--gray-200); border-radius: 6px; overflow: hidden; }
+  .s-block-hd { background: var(--gray-50); padding: 8px 12px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--gray-200); }
+  .s-block-hd .title { font-weight: 600; font-size: 13px; flex: 1; }
+  .s-block-bd { padding: 10px 12px; }
+  .s-item { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 5px; }
+  .s-item:hover { background: var(--gray-50); }
+  .s-item .name { flex: 1; font-size: 13px; }
+  .s-item .sub  { font-size: 11px; color: var(--gray-400); min-width: 70px; }
+  .drag-handle { cursor: grab; color: var(--gray-300); font-size: 16px; line-height: 1; padding: 0 2px; user-select: none; }
+  .drag-handle:active { cursor: grabbing; }
+  .s-item.drag-over { border: 2px dashed var(--primary); background: #eff6ff; }
+  .s-item.dragging { opacity: 0.4; }
+  .s-block-drag { cursor: grab; color: var(--gray-400); font-size: 14px; padding: 0 4px; user-select: none; }
+  .s-block-drag:active { cursor: grabbing; }
+  .s-block-wrap.drag-over { outline: 2px dashed var(--primary); border-radius: 6px; }
+  .s-block-wrap.dragging { opacity: 0.4; }
+
+  .hidden { display: none !important; }
+
+  /* ── MISC ── */
+  .text-right { text-align: right; }
+  .text-center { text-align: center; }
+  .font-mono { font-family: monospace; }
+  .amount { font-weight: 600; font-size: 13px; }
+  .divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ── COMPANY COLORS ── */
+  .co-ostem { color: #0ea5e9; }
+  .co-neo { color: #8b5cf6; }
+  .co-straumann { color: #f59e0b; }
+
+  /* ── REPORT ── */
+  .report-section { margin-bottom: 24px; }
+  .report-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--gray-100); }
+  .report-row:last-child { border-bottom: none; }
+  .report-total { font-weight: 700; font-size: 15px; padding-top: 12px; border-top: 2px solid var(--gray-200) !important; border-bottom: none !important; }
+
+  /* Settings page */
+  .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .item-list { display: flex; flex-direction: column; gap: 8px; }
+  .item-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--gray-50); border-radius: 6px; }
+  .item-row span { flex: 1; font-size: 13px; }
+
+  /* ── LOGIN ── */
+  #login-screen {
+    position: fixed; inset: 0; background: #0f172a;
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+  }
+  #login-screen.hidden { display: none; }
+  .login-box {
+    background: #fff; border-radius: 14px; padding: 40px 36px; width: 100%; max-width: 380px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.4);
+  }
+  .login-logo { font-size: 28px; font-weight: 800; color: #1e3a5f; margin-bottom: 4px; white-space: nowrap; }
+  .login-sub  { font-size: 13px; color: var(--gray-400); margin-bottom: 32px; }
+  .login-role-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .login-role-btn {
+    flex: 1; padding: 10px; border-radius: 8px; border: 2px solid var(--gray-200);
+    background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--gray-600);
+    transition: all .15s;
+  }
+  .login-role-btn.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+  .login-err { color: var(--red); font-size: 12px; margin-top: 8px; min-height: 16px; }
+  #login-screen .footer-info { font-size: 11px; color: var(--gray-400); text-align: center; margin-top: 24px; }
+
+  /* ── TOPBAR role badge ── */
+  .role-badge { font-size: 11px; padding: 3px 10px; border-radius: 99px; font-weight: 600; }
+  .role-badge.admin { background: #fef3c7; color: #92400e; }
+  .role-badge.staff { background: #dcfce7; color: #15803d; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo" style="display:flex;align-items:center;gap:12px"><img src="joydentallogo.png" style="height:56px;object-fit:contain">조이치과 관리 시스템</div>
+    <div class="login-sub">Joy Dental Clinic Management System</div>
+    <div class="login-role-tabs">
+      <button class="login-role-btn active" onclick="Auth.selectRole('admin',this)">👨‍⚕️ 원장</button>
+      <button class="login-role-btn" onclick="Auth.selectRole('staff',this)">👩‍💼 직원</button>
+    </div>
+    <div class="form-group" id="login-pw-group">
+      <label>비밀번호</label>
+      <input type="password" id="login-pw" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')Auth.doLogin()">
+    </div>
+    <div class="login-err" id="login-err"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:16px;padding:11px" onclick="Auth.doLogin()">로그인</button>
+    <div class="footer-info">데이터는 이 기기의 브라우저에 저장됩니다</div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div id="sidebar" class="hidden">
+  <div class="logo" id="sidebar-logo" style="display:flex;align-items:center;gap:10px"><img src="joydentallogo.png" style="height:36px;object-fit:contain;flex-shrink:0"><span>조이치과 관리 시스템<span id="sidebar-sub" style="display:block">로딩 중...</span></span></div>
+  <nav id="nav"></nav>
+  <div class="footer">v1.0 · 데이터는 브라우저에 저장됩니다</div>
+</div>
+
+<!-- MAIN -->
+<div id="main" class="hidden">
+  <div id="topbar">
+    <h1 id="page-title">대시보드</h1>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="month-nav">
+        <button onclick="App.prevMonth()">◀</button>
+        <span id="month-label"></span>
+        <button onclick="App.nextMonth()">▶</button>
+      </div>
+      <span id="role-badge" class="role-badge"></span>
+      <button class="btn btn-ghost btn-sm" onclick="Auth.logout()">로그아웃</button>
+    </div>
+  </div>
+  <div id="content"></div>
+</div>
+
+<!-- MODAL CONTAINER -->
+<div id="modal-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// DATA LAYER
+// ═══════════════════════════════════════════════════════════
+// ── 서버 API URL ─────────────────────────────────────────────
+// Railway 배포 후 이 값을 실제 URL로 변경하세요.
+// 예: 'https://joydental-production.up.railway.app'
+// 로컬 테스트: 'http://localhost:3000'
+// 서버 없이 로컬에서만 쓸 경우: null (localStorage 전용 모드)
+const SERVER_URL = null; // ← 배포 후 여기에 URL 입력
+
+const DB = {
+  // 메모리 캐시 (앱 시작 시 서버에서 로드, 없으면 localStorage 사용)
+  _cache: {},
+  _serverOk: false,
+
+  // 동기 읽기 (캐시에서)
+  _get(k) {
+    if (k in this._cache) return this._cache[k];
+    // 폴백: localStorage
+    try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; }
+  },
+
+  // 동기 쓰기 (캐시 즉시 반영) + 비동기 서버 저장
+  _set(k, v) {
+    this._cache[k] = v;
+    localStorage.setItem(k, JSON.stringify(v)); // 로컬 백업
+    if (this._serverOk && SERVER_URL) {
+      fetch(`${SERVER_URL}/api/data/${k}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(v)
+      }).catch(err => console.warn('서버 저장 실패 (로컬 백업됨):', err));
+    }
+  },
+
+  // 앱 시작 시 서버에서 전체 데이터 로드
+  async loadAll() {
+    if (!SERVER_URL) {
+      console.log('로컬 모드: localStorage 사용 중');
+      return;
+    }
+    try {
+      const res = await fetch(`${SERVER_URL}/api/data`, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { data } = await res.json();
+      this._cache = data || {};
+      this._serverOk = true;
+      console.log('✅ 서버 연결 성공 — 데이터 로드 완료');
+    } catch (err) {
+      console.warn('⚠️ 서버 연결 실패 — localStorage 폴백 모드:', err.message);
+      this._serverOk = false;
+      // localStorage 데이터를 캐시로 복사
+      Object.keys(localStorage).filter(k => k.startsWith('dc_')).forEach(k => {
+        try { this._cache[k] = JSON.parse(localStorage.getItem(k)); } catch {}
+      });
+    }
+  },
+
+  // --- Settings ---
+  getSettings() {
+    const defaults = {
+      labs: [
+        { id: 1, name: '기공소 A', contact: '' },
+        { id: 2, name: '기공소 B', contact: '' },
+        { id: 3, name: '기공소 C', contact: '' }
+      ],
+      directCategories: ['인건비','임대료','전기/가스','통신비','보험료','세금/공과금','기타'],
+      fixtureCompanies: ['오스템', '네오', '스트라우만'],
+      prostheticTypes: ['PFM 크라운','지르코니아 크라운','골드 크라운','임플란트 크라운','PFM 브릿지','지르코니아 브릿지','임플란트 보철','틀니(완전)','틀니(부분)','인레이','온레이','Laminate','기타'],
+      implantMatCategories: [
+        { name: '힐링 어버트먼트', trackInventory: false },
+        { name: '커버스크류',      trackInventory: true  },
+        { name: '골이식재',        trackInventory: true  },
+        { name: '차폐막',          trackInventory: true  },
+        { name: '기타 수술 재료',  trackInventory: true  },
+        { name: '임프레션 코핑',   trackInventory: false },
+        { name: '아날로그',        trackInventory: false },
+      ],
+      nextId: { lab: 4 }
+    };
+    const saved = this._get('dc_settings');
+    if (!saved) return defaults;
+    // 새 키 누락 보완
+    if (!saved.fixtureCompanies) saved.fixtureCompanies = defaults.fixtureCompanies;
+    if (!saved.prostheticTypes) saved.prostheticTypes = defaults.prostheticTypes;
+    if (!saved.implantMatCategories) saved.implantMatCategories = defaults.implantMatCategories;
+    return saved;
+  },
+  saveSettings(s) { this._set('dc_settings', s); },
+
+  // --- Fixture Items (픽스쳐 마스터) ---
+  getFixtures() { return this._get('dc_fixtures') || []; },
+  saveFixtures(d) { this._set('dc_fixtures', d); },
+
+  // --- Implant Material Items ---
+  getImplantMaterials() { return this._get('dc_implant_mats') || []; },
+  saveImplantMaterials(d) { this._set('dc_implant_mats', d); },
+
+  // --- Fixture Usage ---
+  getFixtureUsage() { return this._get('dc_fixture_usage') || []; },
+  saveFixtureUsage(d) { this._set('dc_fixture_usage', d); },
+
+  // --- Implant Material Usage ---
+  getMatUsage() { return this._get('dc_mat_usage') || []; },
+  saveMatUsage(d) { this._set('dc_mat_usage', d); },
+
+  // --- Implant Orders (입고) ---
+  getImplantOrders() { return this._get('dc_implant_orders') || []; },
+  saveImplantOrders(d) { this._set('dc_implant_orders', d); },
+
+  // --- General Dental Material Orders ---
+  getGeneralOrders() { return this._get('dc_general_orders') || []; },
+  saveGeneralOrders(d) { this._set('dc_general_orders', d); },
+
+  // --- Lab Work ---
+  getLabWork() { return this._get('dc_lab_work') || []; },
+  saveLabWork(d) { this._set('dc_lab_work', d); },
+
+  // --- Direct Expenses ---
+  getDirectExpenses() { return this._get('dc_direct') || []; },
+  saveDirectExpenses(d) { this._set('dc_direct', d); },
+
+  // --- Vendors ---
+  getVendors() { return this._get('dc_vendors') || []; },
+  saveVendors(d) { this._set('dc_vendors', d); },
+
+  // --- ID Generator ---
+  nextId(prefix) {
+    const k = 'dc_id_' + prefix;
+    const n = (this._get(k) || 0) + 1;
+    this._set(k, n);
+    return n;
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// AUTH
+// — 서버 전환 시 login() 내부만 fetch('/api/login')으로 교체
+// ═══════════════════════════════════════════════════════════
+const Auth = {
+  _SK: 'dc_session',
+  _role: null,   // 'admin' | 'staff'
+  _selectedRole: 'admin',
+
+  getRole()    { return this._role; },
+  isAdmin()    { return this._role === 'admin'; },
+  isLoggedIn() { return !!this._role; },
+
+  // 로그인 화면에서 역할 탭 클릭
+  selectRole(role, btn) {
+    this._selectedRole = role;
+    document.querySelectorAll('.login-role-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    // 직원은 비밀번호 없을 수 있으므로 placeholder 변경
+    const pw = document.getElementById('login-pw');
+    const creds = DB.getSettings().credentials || {};
+    if (role === 'staff' && !creds.staffPassword) {
+      pw.placeholder = '(비밀번호 없음 — 그냥 로그인)';
+    } else {
+      pw.placeholder = '비밀번호 입력';
+    }
+    document.getElementById('login-err').textContent = '';
+  },
+
+  // 자격증명 확인 — 서버 전환 시 이 함수 body만 교체
+  async _checkCredentials(role, password) {
+    const creds = DB.getSettings().credentials || { adminPassword: '1234', staffPassword: '' };
+    if (role === 'admin') {
+      return password === creds.adminPassword ? { ok: true } : { ok: false, msg: '비밀번호가 틀렸습니다.' };
+    }
+    if (role === 'staff') {
+      if (!creds.staffPassword || password === creds.staffPassword) return { ok: true };
+      return { ok: false, msg: '비밀번호가 틀렸습니다.' };
+    }
+    return { ok: false, msg: '역할을 선택하세요.' };
+  },
+
+  async doLogin() {
+    const role = this._selectedRole;
+    const pw   = document.getElementById('login-pw').value;
+    const result = await this._checkCredentials(role, pw);
+    if (!result.ok) {
+      document.getElementById('login-err').textContent = result.msg;
+      return;
+    }
+    this._role = role;
+    sessionStorage.setItem(this._SK, role);
+    this._showApp();
+  },
+
+  logout() {
+    this._role = null;
+    sessionStorage.removeItem(this._SK);
+    document.getElementById('login-pw').value = '';
+    document.getElementById('login-err').textContent = '';
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('sidebar').classList.add('hidden');
+    document.getElementById('main').classList.add('hidden');
+  },
+
+  // 세션 복원 (페이지 새로고침 시)
+  restore() {
+    const saved = sessionStorage.getItem(this._SK);
+    if (saved === 'admin' || saved === 'staff') {
+      this._role = saved;
+      this._showApp();
+    }
+    // 세션 없으면 로그인 화면 유지
+  },
+
+  _showApp() {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('sidebar').classList.remove('hidden');
+    document.getElementById('main').classList.remove('hidden');
+    // 역할 배지
+    const badge = document.getElementById('role-badge');
+    badge.textContent = this._role === 'admin' ? '👨‍⚕️ 원장' : '👩‍💼 직원';
+    badge.className = 'role-badge ' + this._role;
+    // 사이드바 로고
+    document.getElementById('sidebar-sub').textContent =
+      this._role === 'admin' ? '지출·재고 통합 관리' : '재료·기공 관리';
+    // 네비게이션 렌더
+    App.renderNav();
+    App.renderCurrentPage();
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════
+const fmt = {
+  won(n) { return (n || 0).toLocaleString('ko-KR') + '원'; },
+  date(s) { if (!s) return ''; const d = new Date(s); return `${d.getMonth()+1}/${d.getDate()}`; },
+  dateFull(s) { if (!s) return ''; return s.replace(/-/g, '.'); },
+  ym(y, m) { return `${y}년 ${m}월`; },
+};
+
+function ym(y, m) { return `${y}-${String(m).padStart(2,'0')}`; }
+function inMonth(dateStr, y, m) { return dateStr && dateStr.startsWith(ym(y, m)); }
+
+function today() { return new Date().toISOString().slice(0, 10); }
+
+function sum(arr, fn) { return arr.reduce((a, b) => a + (fn(b) || 0), 0); }
+
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+
+function showModal(html) {
+  const c = document.getElementById('modal-container');
+  c.innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">${html}</div>`;
+}
+function closeModal() { document.getElementById('modal-container').innerHTML = ''; }
+
+let _confirmCb = null;
+function confirm2(msg, cb) {
+  _confirmCb = cb;
+  showModal(`<div class="modal" style="max-width:360px">
+    <div class="modal-title">확인</div>
+    <p style="font-size:14px;margin-bottom:20px">${msg}</p>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn btn-danger" onclick="closeModal();if(_confirmCb){_confirmCb();_confirmCb=null;}">삭제</button>
+    </div>
+  </div>`);
+}
+
+// 설정 기반 동적 헬퍼 (설정 저장 전 기본값 폴백)
+const COMPANIES_DEFAULT = ['오스템', '네오', '스트라우만'];
+function getCompanies() { return DB.getSettings().fixtureCompanies || COMPANIES_DEFAULT; }
+function getImplantMatCats() { return DB.getSettings().implantMatCategories || []; }
+function isTrackInventory(catName) {
+  const cat = getImplantMatCats().find(c => c.name === catName);
+  return cat ? cat.trackInventory : false;
+}
+// 사용 기록 가능한 분류 (임프레션코핑/아날로그 제외 — 주문량만)
+function getUsageOnlyCats() { return ['임프레션 코핑', '아날로그']; }
+
+// 거래처 datalist HTML 생성 헬퍼
+function vendorDatalist(id, category) {
+  const vendors = DB.getVendors().filter(v => !category || v.category === category || v.category === '전체');
+  return `<datalist id="${id}">${vendors.map(v => `<option value="${v.name}">`).join('')}</datalist>`;
+}
+
+function getProstheticTypes() { return DB.getSettings().prostheticTypes || ['PFM 크라운','지르코니아 크라운','골드 크라운','임플란트 크라운','기타']; }
+const PAYMENT_METHODS = ['카드', '이체', '현금'];
+
+// ═══════════════════════════════════════════════════════════
+// APP STATE & ROUTER
+// ═══════════════════════════════════════════════════════════
+const App = {
+  page: null,
+  year: new Date().getFullYear(),
+  month: new Date().getMonth() + 1,
+
+  // 역할별 네비게이션 정의
+  _navAdmin: [
+    { section: '메인' },
+    { page: 'dashboard', icon: '📊', label: '대시보드' },
+    { section: '지출 입력' },
+    { page: 'direct',  icon: '💳', label: '직접 지출' },
+    { page: 'implant', icon: '🔩', label: '임플란트 재료' },
+    { page: 'general', icon: '📦', label: '일반 치과재료 및 의약품' },
+    { page: 'lab',     icon: '🏭', label: '기공 의뢰' },
+    { section: '관리' },
+    { page: 'report',   icon: '📋', label: '월별 리포트' },
+    { page: 'settings', icon: '⚙️', label: '설정' },
+  ],
+  _navStaff: [
+    { section: '재료 관리' },
+    { page: 'implant', icon: '🔩', label: '임플란트 재료 관리' },
+    { page: 'general', icon: '📦', label: '일반 치과재료 및 의약품' },
+    { page: 'lab',     icon: '🏭', label: '기공 의뢰 관리' },
+  ],
+
+  renderNav() {
+    const nav = document.getElementById('nav');
+    const items = Auth.isAdmin() ? this._navAdmin : this._navStaff;
+    nav.innerHTML = items.map(item => {
+      if (item.section) return `<div class="section-label">${item.section}</div>`;
+      return `<a class="nav-link${this.page === item.page ? ' active' : ''}" data-page="${item.page}" onclick="App.navigate('${item.page}')">
+        <span class="icon">${item.icon}</span>${item.label}</a>`;
+    }).join('');
+  },
+
+  prevMonth() {
+    if (this.month === 1) { this.month = 12; this.year--; }
+    else this.month--;
+    this.renderCurrentPage();
+  },
+  nextMonth() {
+    if (this.month === 12) { this.month = 1; this.year++; }
+    else this.month++;
+    this.renderCurrentPage();
+  },
+
+  navigate(page) {
+    this.page = page;
+    document.querySelectorAll('.nav-link').forEach(a => a.classList.toggle('active', a.dataset.page === page));
+    const titles = {
+      dashboard: '대시보드', direct: '직접 지출',
+      implant: Auth.isAdmin() ? '임플란트 재료' : '임플란트 재료 관리',
+      general: '일반 치과재료 및 의약품',
+      lab: Auth.isAdmin() ? '기공 의뢰' : '기공 의뢰 관리',
+      report: '월별 리포트', settings: '설정'
+    };
+    document.getElementById('page-title').textContent = titles[page] || page;
+    this.renderCurrentPage();
+  },
+
+  renderCurrentPage() {
+    if (!Auth.isLoggedIn()) return;
+    document.getElementById('month-label').textContent = fmt.ym(this.year, this.month);
+    // 기본 페이지 설정
+    if (!this.page) this.page = Auth.isAdmin() ? 'dashboard' : 'implant';
+    const map = {
+      dashboard: Pages.dashboard, direct: Pages.direct,
+      implant: Pages.implant,     general: Pages.general,
+      lab: Pages.lab,             report: Pages.report,
+      settings: Pages.settings
+    };
+    // 직원이 원장 전용 페이지 접근 차단
+    const adminOnly = ['dashboard','direct','report','settings'];
+    if (!Auth.isAdmin() && adminOnly.includes(this.page)) this.page = 'implant';
+    const fn = map[this.page];
+    if (fn) fn.call(Pages, this.year, this.month);
+    this.renderNav();
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// PAGES
+// ═══════════════════════════════════════════════════════════
+const Pages = {
+
+  // ─── DASHBOARD ───
+  dashboard(y, m) {
+    const direct = DB.getDirectExpenses().filter(r => inMonth(r.date, y, m));
+    const implantOrders = DB.getImplantOrders().filter(r => inMonth(r.date, y, m));
+    const generalOrders = DB.getGeneralOrders().filter(r => inMonth(r.date, y, m));
+    const labWork = DB.getLabWork().filter(r => inMonth(r.date, y, m));
+
+    const totalDirect = sum(direct, r => r.amount);
+    const totalImplant = sum(implantOrders, r => r.total);
+    const totalGeneral = sum(generalOrders, r => r.amount);
+    const totalLab = sum(labWork, r => r.amount);
+    const grandTotal = totalDirect + totalImplant + totalGeneral + totalLab;
+
+    // Low stock alerts
+    const fixtures = DB.getFixtures().filter(f => f.stock <= (f.min_stock || 2));
+    const mats = DB.getImplantMaterials().filter(m2 => isTrackInventory(m2.category) && m2.stock <= (m2.min_stock || 1));
+
+    let alerts = '';
+    if (fixtures.length || mats.length) {
+      const items = [...fixtures.map(f => `[${f.company}] ${f.diameter}×${f.length} (재고: ${f.stock}개)`),
+                     ...mats.map(m2 => `${m2.name} (재고: ${m2.stock}${m2.unit||'개'})`)];
+      alerts = `<div class="alert alert-warning">⚠️ 재고 부족 알림: ${items.join(', ')}</div>`;
+    }
+
+    // Recent entries (last 7)
+    const allRecent = [
+      ...direct.map(r => ({ date: r.date, label: `직접지출 · ${r.category}`, name: r.description, amount: r.amount })),
+      ...implantOrders.map(r => ({ date: r.date, label: '임플란트 입고', name: r.item_name, amount: r.total })),
+      ...generalOrders.map(r => ({ date: r.date, label: '일반 재료', name: r.description, amount: r.amount })),
+      ...labWork.map(r => ({ date: r.date, label: `기공[${r.lab_name}]`, name: `${r.patient_name} · ${r.prosthetic_type}`, amount: r.amount })),
+    ].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 10);
+
+    const recentRows = allRecent.length
+      ? allRecent.map(r => `<tr>
+          <td>${fmt.date(r.date)}</td>
+          <td><span class="badge badge-gray">${r.label}</span></td>
+          <td>${r.name}</td>
+          <td class="text-right amount">${fmt.won(r.amount)}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="4" class="tbl-empty">이번 달 기록이 없습니다</td></tr>`;
+
+    // Chart bar
+    const maxVal = Math.max(totalDirect, totalImplant, totalGeneral, totalLab, 1);
+    const bars = [
+      { label: '직접지출', val: totalDirect, color: '#2563eb' },
+      { label: '임플란트재료', val: totalImplant, color: '#7c3aed' },
+      { label: '일반재료', val: totalGeneral, color: '#0891b2' },
+      { label: '기공의뢰', val: totalLab, color: '#d97706' },
+    ].map(b => `
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px">
+        <div style="font-size:11px;color:var(--gray-600);font-weight:600">${fmt.won(b.val)}</div>
+        <div style="width:100%;background:var(--gray-100);border-radius:6px;height:120px;display:flex;align-items:flex-end;overflow:hidden">
+          <div style="width:100%;height:${Math.round(b.val/maxVal*100)}%;background:${b.color};border-radius:4px 4px 0 0;transition:height .3s"></div>
+        </div>
+        <div style="font-size:11px;color:var(--gray-600)">${b.label}</div>
+      </div>`).join('');
+
+    document.getElementById('content').innerHTML = `
+      ${alerts}
+      <div class="stats-grid">
+        <div class="stat-card blue"><div class="label">이달 총 지출</div><div class="value">${fmt.won(grandTotal)}</div><div class="sub">${fmt.ym(y,m)}</div></div>
+        <div class="stat-card"><div class="label">직접 지출</div><div class="value" style="font-size:18px">${fmt.won(totalDirect)}</div></div>
+        <div class="stat-card"><div class="label">임플란트 재료</div><div class="value" style="font-size:18px">${fmt.won(totalImplant)}</div></div>
+        <div class="stat-card"><div class="label">일반 치과 재료</div><div class="value" style="font-size:18px">${fmt.won(totalGeneral)}</div></div>
+        <div class="stat-card yellow"><div class="label">기공 의뢰</div><div class="value" style="font-size:18px">${fmt.won(totalLab)}</div></div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><div class="card-title">카테고리별 비율</div></div>
+          <div style="display:flex;gap:12px;height:160px;align-items:flex-end">${bars}</div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">최근 입력 내역</div></div>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>날짜</th><th>구분</th><th>내용</th><th class="text-right">금액</th></tr></thead>
+            <tbody>${recentRows}</tbody>
+          </table></div>
+        </div>
+      </div>`;
+  },
+
+  // ─── DIRECT EXPENSES ───
+  direct(y, m) {
+    const data = DB.getDirectExpenses();
+    const filtered = data.filter(r => inMonth(r.date, y, m));
+    const settings = DB.getSettings();
+    const total = sum(filtered, r => r.amount);
+
+    const rows = filtered.length
+      ? [...filtered].sort((a,b) => b.date.localeCompare(a.date)).map(r => `<tr>
+          <td>${fmt.dateFull(r.date)}</td>
+          <td><span class="badge badge-gray">${r.category}</span></td>
+          <td>${r.vendor || ''}</td>
+          <td>${r.description || ''}</td>
+          <td><span class="badge badge-blue">${r.payment}</span></td>
+          <td class="text-right amount">${fmt.won(r.amount)}</td>
+          <td><button class="btn btn-danger btn-sm" onclick="Pages.deleteDirectExpense(${r.id})">삭제</button></td>
+        </tr>`).join('')
+      : `<tr><td colspan="7" class="tbl-empty">이번 달 직접 지출 내역이 없습니다</td></tr>`;
+
+    document.getElementById('content').innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">직접 지출 (카드/이체)</div>
+            <div style="font-size:12px;color:var(--gray-400);margin-top:2px">이달 합계: <strong>${fmt.won(total)}</strong></div>
+          </div>
+          <button class="btn btn-primary" onclick="Pages.addDirectModal()">+ 지출 추가</button>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>날짜</th><th>분류</th><th>거래처</th><th>내용</th><th>결제</th><th class="text-right">금액</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </div>`;
+  },
+  addDirectModal(edit) {
+    const settings = DB.getSettings();
+    const cats = settings.directCategories.map(c => `<option value="${c}" ${edit?.category===c?'selected':''}>${c}</option>`).join('');
+    const methods = PAYMENT_METHODS.map(p => `<option value="${p}" ${edit?.payment===p?'selected':''}>${p}</option>`).join('');
+    showModal(`<div class="modal">
+      <div class="modal-title">${edit ? '지출 수정' : '직접 지출 추가'}</div>
+      ${vendorDatalist('vlist-direct', '기타')}
+      <form onsubmit="Pages.saveDirectExpense(event,${edit?.id||'null'})">
+        <div class="form-grid">
+          <div class="form-group"><label>날짜</label><input type="date" name="date" value="${edit?.date||today()}" required></div>
+          <div class="form-group"><label>분류</label><select name="category">${cats}</select></div>
+          <div class="form-group"><label>거래처</label><input type="text" name="vendor" value="${edit?.vendor||''}" list="vlist-direct" placeholder="거래처명 입력 또는 선택"></div>
+          <div class="form-group"><label>결제 방법</label><select name="payment">${methods}</select></div>
+          <div class="form-group" style="grid-column:1/-1"><label>내용/메모</label><input type="text" name="description" value="${edit?.description||''}" placeholder="지출 내용"></div>
+          <div class="form-group"><label>금액 (원)</label><input type="number" name="amount" value="${edit?.amount||''}" min="0" step="100" required placeholder="0"></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  saveDirectExpense(e, editId) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const data = DB.getDirectExpenses();
+    if (editId) {
+      const idx = data.findIndex(r => r.id === editId);
+      if (idx >= 0) data[idx] = { ...data[idx], date: f.get('date'), category: f.get('category'), vendor: f.get('vendor'), description: f.get('description'), payment: f.get('payment'), amount: +f.get('amount') };
+    } else {
+      data.push({ id: DB.nextId('direct'), date: f.get('date'), category: f.get('category'), vendor: f.get('vendor'), description: f.get('description'), payment: f.get('payment'), amount: +f.get('amount') });
+    }
+    DB.saveDirectExpenses(data);
+    closeModal();
+    Pages.direct(App.year, App.month);
+  },
+  deleteDirectExpense(id) {
+    confirm2('이 지출 내역을 삭제하시겠습니까?', () => {
+      DB.saveDirectExpenses(DB.getDirectExpenses().filter(r => r.id !== id));
+      Pages.direct(App.year, App.month);
+    });
+  },
+
+  // ─── IMPLANT MATERIALS ───
+  _implantTab: 'stock',
+  implant(y, m) {
+    const tab = Pages._implantTab;
+    const tabs = [
+      { id: 'stock', label: '재고 현황' },
+      { id: 'usage', label: '사용 기록' },
+      { id: 'orders', label: '주문 기록' },
+      { id: 'returns', label: '페일 픽스쳐 관리' },
+      { id: 'items', label: '품목 관리' },
+    ];
+    const tabsHtml = tabs.map(t => `<button class="tab ${tab===t.id?'active':''}" onclick="Pages._implantTab='${t.id}';Pages.implant(App.year,App.month)">${t.label}</button>`).join('');
+
+    let body = '';
+    if (tab === 'stock') body = Pages._implantStock();
+    else if (tab === 'usage') body = Pages._implantUsage(y, m);
+    else if (tab === 'orders') body = Pages._implantOrders(y, m);
+    else if (tab === 'returns') body = Pages._implantReturns(y, m);
+    else if (tab === 'items') body = Pages._implantItems();
+
+    const lowFix = DB.getFixtures().filter(f => f.stock <= (f.min_stock || 2));
+    const lowMat = DB.getImplantMaterials().filter(m2 => isTrackInventory(m2.category) && m2.stock <= (m2.min_stock || 1));
+    let stockAlert = '';
+    if (lowFix.length || lowMat.length) {
+      const items = [
+        ...lowFix.map(f => `[${f.company}] ${f.diameter}×${f.length}mm (재고: ${f.stock}개)`),
+        ...lowMat.map(m2 => `${m2.name} (재고: ${m2.stock}${m2.unit||'개'})`),
+      ];
+      stockAlert = `<div class="alert alert-warning" style="margin-bottom:12px">⚠️ 재고 부족 알림: ${items.join(', ')}</div>`;
+    }
+
+    document.getElementById('content').innerHTML = `
+      <div class="card">
+        <div class="tabs">${tabsHtml}</div>
+        ${stockAlert}
+        ${body}
+      </div>`;
+    Pages._bindDrag();
+  },
+
+  _implantStock() {
+    const fixtures = DB.getFixtures();
+    const mats = DB.getImplantMaterials();
+
+    // Fixtures grouped by company
+    const byCompany = {};
+    getCompanies().forEach(c => { byCompany[c] = fixtures.filter(f => f.company === c); });
+
+    const fixtureHtml = getCompanies().map(co => {
+      const list = byCompany[co];
+      if (!list.length) return `<div style="margin-bottom:16px"><strong>${co}</strong> <span style="font-size:12px;color:var(--gray-400)">— 등록된 품목 없음</span></div>`;
+      const admin = Auth.isAdmin();
+      const rows = list.sort((a,b) => (a.fixture_type||'').localeCompare(b.fixture_type||'')||(+a.diameter)-(+b.diameter)||(+a.length)-(+b.length)).map(f => {
+        const cls = f.stock === 0 ? 'stock-zero' : f.stock <= (f.min_stock||2) ? 'stock-low' : 'stock-ok';
+        return `<tr>
+          <td>${f.company}</td>
+          <td>${f.fixture_type ? `<span class="badge badge-gray">${f.fixture_type}</span>` : '<span style="color:var(--gray-400)">-</span>'}</td>
+          <td>${f.diameter}mm</td><td>${f.length}mm</td>
+          <td class="${cls} text-center">${f.stock}개</td>
+          ${admin ? `<td class="text-right" style="font-size:12px;color:var(--gray-400)">${fmt.won(f.unit_price)}/개</td>` : ''}
+          <td></td>
+        </tr>`;
+      }).join('');
+      return `<div style="margin-bottom:20px">
+        <div style="font-weight:600;margin-bottom:8px;color:var(--primary)">${co}</div>
+        <table><thead><tr><th>제조사</th><th>종류</th><th>직경</th><th>길이</th><th class="text-center">재고</th>${admin?'<th class="text-right">단가</th>':''}<th></th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`;
+    }).join('');
+
+    const admin2 = Auth.isAdmin();
+    const trackedMats = mats.filter(m => isTrackInventory(m.category));
+    // 분류별 그룹핑
+    const matCatOrder = getImplantMatCats().filter(c => c.trackInventory).map(c => c.name);
+    const matByCat = {};
+    trackedMats.forEach(m => { if (!matByCat[m.category]) matByCat[m.category] = []; matByCat[m.category].push(m); });
+    const catKeys = [...new Set([...matCatOrder.filter(k => matByCat[k]), ...Object.keys(matByCat)])];
+
+    const matGroupHtml = catKeys.length ? catKeys.map(cat => {
+      const items = matByCat[cat] || [];
+      const catRows = items.map(m => {
+        const cls = m.stock === 0 ? 'stock-zero' : m.stock <= (m.min_stock||1) ? 'stock-low' : 'stock-ok';
+        const specLabel = m.spec ? `<span style="font-size:11px;color:var(--gray-400);margin-left:4px">(${m.spec})</span>` : '';
+        return `<tr>
+          <td>${m.name}${specLabel}</td>
+          <td class="${cls} text-center">${m.stock} ${m.unit||'개'}</td>
+          ${admin2 ? `<td class="text-right" style="font-size:12px;color:var(--gray-400)">${fmt.won(m.unit_price)}/${m.unit||'개'}</td>` : ''}
+          <td></td>
+        </tr>`;
+      }).join('');
+      return `<div style="margin-bottom:18px">
+        <div style="font-weight:600;font-size:12px;color:var(--primary);margin-bottom:6px">${cat}</div>
+        <table><thead><tr><th>품명</th><th class="text-center">재고</th>${admin2?'<th class="text-right">단가</th>':''}<th></th></tr></thead>
+        <tbody>${catRows}</tbody></table>
+      </div>`;
+    }).join('') : `<div style="color:var(--gray-400);font-size:13px;padding:8px 0">등록된 재료가 없습니다. [품목 관리]에서 추가하세요.</div>`;
+
+    return `
+      <div class="card-header" style="padding:0;margin-bottom:16px">
+        <div class="card-title">재고 현황</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" onclick="Pages.addUsageModal()">사용 기록 추가</button>
+          <button class="btn btn-primary" onclick="Pages.addOrderModal()">주문 추가</button>
+        </div>
+      </div>
+      <div style="font-weight:600;font-size:13px;color:var(--gray-600);margin-bottom:10px">📌 픽스쳐</div>
+      ${fixtureHtml}
+      <hr class="divider">
+      <div style="font-weight:600;font-size:13px;color:var(--gray-600);margin:16px 0 10px">📌 기타 수술 재료 (재고 관리)</div>
+      ${matGroupHtml}`;
+  },
+
+  _implantUsage(y, m) {
+    const admin = Auth.isAdmin();
+    const fixtureUsage = DB.getFixtureUsage().filter(r => inMonth(r.date, y, m));
+    const matUsage = DB.getMatUsage().filter(r => inMonth(r.date, y, m));
+    const fixtures = DB.getFixtures();
+    const mats = DB.getImplantMaterials();
+
+    const allUsage = [
+      ...fixtureUsage.map(r => {
+        const f = fixtures.find(x => x.id === r.fixture_id);
+        const typeStr = f?.fixture_type ? ` ${f.fixture_type}` : '';
+        return { ...r, label: f ? `[${f.company}]${typeStr} ${f.diameter}×${f.length}mm` : '알 수 없음', cost: (f?.unit_price||0) * r.quantity, type: 'fixture' };
+      }),
+      ...matUsage.map(r => {
+        const mat = mats.find(x => x.id === r.mat_id);
+        return { ...r, label: mat ? `[${mat.category}] ${mat.name}` : '알 수 없음', cost: (mat?.unit_price||0) * r.quantity, type: 'mat' };
+      })
+    ].sort((a,b) => b.date.localeCompare(a.date) || (b.patient_no||'').localeCompare(a.patient_no||''));
+
+    const totalCost = sum(allUsage, r => r.cost);
+    const cols = admin ? 7 : 6;
+
+    let rows = '';
+    if (allUsage.length) {
+      const groups = [];
+      let lastKey = null;
+      allUsage.forEach(r => {
+        const key = `${r.date}||${r.patient_name||''}||${r.patient_no||''}`;
+        if (key !== lastKey) { groups.push({ key, date: r.date, patient_name: r.patient_name, patient_no: r.patient_no, items: [] }); lastKey = key; }
+        groups[groups.length-1].items.push(r);
+      });
+
+      rows = groups.map(g => {
+        const gCost = sum(g.items, r => r.cost);
+        const gKey = encodeURIComponent(g.date + '||' + (g.patient_name||'') + '||' + (g.patient_no||''));
+        const header = `<tr style="background:var(--primary-light)">
+          <td colspan="${cols-1}" style="padding:7px 10px">
+            <span style="font-weight:700">${fmt.dateFull(g.date)}</span>
+            <span style="font-weight:600;margin-left:10px">${g.patient_name||'환자'}</span>
+            <span class="badge badge-blue" style="margin-left:6px">${g.patient_no||'-'}</span>
+            ${admin ? `<span style="float:right;font-weight:600;font-size:12px">${fmt.won(gCost)}</span>` : ''}
+          </td>
+          <td style="background:var(--primary-light);white-space:nowrap">
+            <button class="btn btn-secondary btn-sm" onclick="Pages.editUsageGroupModal('${gKey}')">수정</button>
+          </td>
+        </tr>`;
+        const itemRows = g.items.map(r => `<tr>
+          <td style="padding-left:20px;color:var(--gray-400);font-size:12px">${r.tooth||''}</td>
+          <td>${r.label}${r.fail ? ' <span class="badge badge-red" style="font-size:10px">페일</span>' : ''}</td>
+          <td class="text-center">${r.quantity}개</td>
+          <td style="color:var(--gray-400);font-size:12px">${r.memo||''}</td>
+          ${admin ? `<td class="text-right amount">${fmt.won(r.cost)}</td>` : ''}
+          <td><button class="btn btn-danger btn-sm" onclick="Pages.deleteUsage(${r.id},'${r.type}')">삭제</button></td>
+        </tr>`).join('');
+        return header + itemRows;
+      }).join('');
+    } else {
+      rows = `<tr><td colspan="${cols}" class="tbl-empty">이번 달 사용 기록이 없습니다</td></tr>`;
+    }
+
+    return `
+      <div class="card-header" style="padding:0;margin-bottom:16px">
+        <div>
+          <div class="card-title">사용 기록 (수술별)</div>
+          ${admin ? `<div style="font-size:12px;color:var(--gray-400)">이달 재료비: <strong>${fmt.won(totalCost)}</strong></div>` : ''}
+        </div>
+        <button class="btn btn-primary" onclick="Pages.addUsageModal()">+ 사용 기록</button>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>치식</th><th>사용 품목</th><th class="text-center">수량</th><th>메모</th>${admin?'<th class="text-right">재료비</th>':''}<th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  },
+
+  _implantOrders(y, m) {
+    const admin = Auth.isAdmin();
+    const orders = DB.getImplantOrders().filter(r => inMonth(r.date, y, m));
+    // 품목별 입고확인 합계
+    const totalConfirmed = sum(orders.filter(r => r.item_status === '입고확인'), r => r.total||0);
+
+    // order_group_id 기준으로 그룹화
+    const groupMap = {};
+    [...orders].sort((a,b) => b.date.localeCompare(a.date)).forEach(r => {
+      const gid = r.order_group_id || r.id;
+      if (!groupMap[gid]) groupMap[gid] = { gid, items: [], date: r.date, vendor: r.vendor, status: r.status, memo: r.memo };
+      groupMap[gid].items.push(r);
+    });
+    const groups = Object.values(groupMap).sort((a,b) => b.date.localeCompare(a.date));
+
+    const groupBadge = s => s === '주문서 발행 완료'
+      ? `<span class="badge" style="background:#ede9fe;color:#7c3aed">주문서 발행 완료</span>`
+      : `<span class="badge badge-orange">주문서 작성</span>`;
+
+    const itemBadge = ist => {
+      if (ist === '입고확인')  return `<span class="badge badge-green" style="font-size:10px">입고확인</span>`;
+      if (ist === '반품 신청') return `<span class="badge" style="background:#fee2e2;color:#dc2626;font-size:10px">반품 신청</span>`;
+      return `<span style="color:var(--gray-400);font-size:11px">대기</span>`;
+    };
+
+    const rows = groups.length
+      ? groups.map(g => {
+          const st = g.status || '주문서 작성';
+          const isPublished = st === '주문서 발행 완료';
+          const rowStyle = isPublished ? ' style="background:#f5f3ff"' : '';
+          const groupTotal = sum(g.items, i => i.total||0);
+
+          const itemLines = g.items.map(r => {
+            let name = r.item_name || '';
+            if (r.item_type === 'fixture' && r.item_id) {
+              const fx = DB.getFixtures().find(x => x.id === r.item_id);
+              if (fx?.fixture_type && !name.includes(fx.fixture_type)) name += ` <span style="color:var(--gray-400);font-size:11px">${fx.fixture_type}</span>`;
+            }
+            if (r.item_type === 'mat' && r.item_id) {
+              const mat = DB.getImplantMaterials().find(x => x.id === r.item_id);
+              if (mat?.spec && !name.includes(mat.spec)) name += ` <span style="color:var(--gray-400);font-size:11px">${mat.spec}</span>`;
+            }
+            const ist = r.item_status || '';
+            const itemActions = isPublished
+              ? ist === '입고확인'
+                ? `${itemBadge(ist)} <button style="font-size:10px;padding:2px 6px" class="btn btn-secondary btn-sm" onclick="Pages.setItemStatus(${r.id},'')">취소</button>`
+                : ist === '반품 신청'
+                  ? `${itemBadge(ist)} <button style="font-size:10px;padding:2px 6px" class="btn btn-secondary btn-sm" onclick="Pages.setItemStatus(${r.id},'')">취소</button>`
+                  : `<button style="font-size:10px;padding:2px 6px;background:#22c55e;color:#fff" class="btn btn-sm" onclick="Pages.setItemStatus(${r.id},'입고확인')">입고확인</button>
+                     <button style="font-size:10px;padding:2px 6px;background:#dc2626;color:#fff" class="btn btn-sm" onclick="Pages.setItemStatus(${r.id},'반품 신청')">반품 신청</button>`
+              : itemBadge(ist);
+            return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;border-bottom:1px solid var(--gray-100)">
+              <span style="flex:1">${name} <span style="color:var(--gray-500)">× ${r.quantity}</span>${admin ? ` <span style="color:var(--gray-400)">(${fmt.won(r.unit_price||0)})</span>` : ''}</span>
+              <span style="white-space:nowrap">${itemActions}</span>
+            </div>`;
+          }).join('');
+
+          const groupActions = st === '주문서 작성'
+            ? `<button class="btn btn-sm" style="background:#7c3aed;color:#fff" onclick="Pages.setOrderStatus(${g.gid},'주문서 발행 완료')">주문서 발행</button>
+               <button class="btn btn-secondary btn-sm" onclick="Pages.addOrderModal(${g.gid})">수정</button>`
+            : `<button class="btn btn-secondary btn-sm" onclick="Pages.setOrderStatus(${g.gid},'주문서 작성')">발행 취소</button>`;
+
+          return `<tr${rowStyle}>
+            <td>${groupBadge(st)}</td>
+            <td>${fmt.dateFull(g.date)}</td>
+            <td>${g.vendor||''}</td>
+            <td style="min-width:280px">${itemLines}</td>
+            ${admin ? `<td class="text-right amount">${fmt.won(groupTotal)}</td>` : ''}
+            <td style="color:var(--gray-400);font-size:12px;max-width:100px">${g.memo||''}</td>
+            <td style="white-space:nowrap;vertical-align:top;padding-top:8px">
+              ${groupActions}
+              <button class="btn btn-danger btn-sm" onclick="Pages.deleteImplantOrder(${g.gid})">삭제</button>
+            </td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="${admin?7:6}" class="tbl-empty">이번 달 주문 기록이 없습니다</td></tr>`;
+
+    return `
+      <div class="card-header" style="padding:0;margin-bottom:16px">
+        <div>
+          <div class="card-title">주문 기록</div>
+          ${admin ? `<div style="font-size:12px;color:var(--gray-400)">이달 입고확인 합계: <strong>${fmt.won(totalConfirmed)}</strong></div>` : ''}
+        </div>
+        <button class="btn btn-primary" onclick="Pages.addOrderModal()">+ 주문 추가</button>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>상태</th><th>날짜</th><th>거래처</th><th>품목</th>${admin?'<th class="text-right">합계</th>':''}<th>비고</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  },
+
+  _implantReturns(y, m) {
+    const admin = Auth.isAdmin();
+    const allUsage = DB.getFixtureUsage().filter(r => r.fail);
+    const monthly = allUsage.filter(r => inMonth(r.date, y, m));
+    const fixtures = DB.getFixtures();
+    const sorted = [...monthly].sort((a,b) => b.date.localeCompare(a.date));
+    const cols = admin ? 8 : 6;
+    const rows = sorted.length ? sorted.map(r => {
+      const f = fixtures.find(x => x.id === r.fixture_id);
+      const typeStr = f?.fixture_type ? ` ${f.fixture_type}` : '';
+      const label = f ? `[${f.company}]${typeStr} ${f.diameter}×${f.length}mm` : '알 수 없음';
+      const rs = r.return_status || '반품 대기';
+      const rsBadge = rs === '반품 완료'
+        ? `<span class="badge badge-green">반품 완료</span>`
+        : `<span class="badge badge-orange">반품 대기</span>`;
+      return `<tr class="${rs === '반품 완료' ? 'status-received' : 'status-order'}">
+        <td>${rsBadge}</td>
+        <td>${fmt.dateFull(r.date)}</td>
+        <td>${r.patient_name||'-'}</td>
+        <td><span class="badge badge-blue">${r.patient_no||'-'}</span></td>
+        <td>${label}</td>
+        <td class="text-center">${r.quantity}개</td>
+        ${admin ? `<td class="text-right amount" style="color:var(--red)">${fmt.won((f?.unit_price||0)*r.quantity)}</td>` : ''}
+        <td style="color:var(--gray-400);font-size:12px">${r.memo||''}</td>
+        <td><button class="btn btn-sm ${rs==='반품 완료'?'btn-secondary':'btn-primary'}" onclick="Pages.toggleReturnStatus(${r.id})">${rs==='반품 완료'?'대기로 변경':'반품 완료'}</button></td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="${cols}" class="tbl-empty">이번 달 반품 기록이 없습니다</td></tr>`;
+
+    const totalLoss = admin ? sum(monthly, r => { const f = fixtures.find(x=>x.id===r.fixture_id); return (f?.unit_price||0)*r.quantity; }) : 0;
+
+    return `
+      <div class="card-header" style="padding:0;margin-bottom:16px">
+        <div>
+          <div class="card-title">페일 픽스쳐 기록</div>
+        </div>
+      </div>
+      <div class="alert" style="background:#fef2f2;border-color:#fecaca;color:#b91c1c;font-size:13px">⚠️ 사용 기록에서 <strong>페일</strong> 체크된 픽스쳐만 표시됩니다. 재고는 사용 기록 시 이미 차감됩니다.</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>상태</th><th>날짜</th><th>환자명</th><th>환자번호</th><th>픽스쳐</th><th class="text-center">수량</th>${admin?'<th class="text-right">손실액</th>':''}<th>메모</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  },
+
+  toggleReturnStatus(id) {
+    const data = DB.getFixtureUsage();
+    const rec = data.find(r => r.id === id);
+    if (!rec) return;
+    rec.return_status = (rec.return_status === '반품 완료') ? '반품 대기' : '반품 완료';
+    DB.saveFixtureUsage(data);
+    Pages.implant(App.year, App.month);
+  },
+
+  _implantItems() {
+    const admin = Auth.isAdmin();
+    const fixtures = DB.getFixtures();
+    const mats = DB.getImplantMaterials();
+
+    const fRows = fixtures.length
+      ? [...fixtures].sort((a,b)=>a.company.localeCompare(b.company)||(a.fixture_type||'').localeCompare(b.fixture_type||'')||(+a.diameter)-(+b.diameter)).map(f=>`<tr>
+          <td>${f.company}</td>
+          <td>${f.fixture_type||'-'}</td>
+          <td>${f.diameter}mm</td><td>${f.length}mm</td>
+          ${admin ? `<td class="text-right">${fmt.won(f.unit_price)}</td>` : ''}
+          <td class="text-center">${f.min_stock||2}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="Pages.editFixtureModal(${f.id})">수정</button>
+              <button class="btn btn-danger btn-sm" onclick="Pages.deleteFixture(${f.id})">삭제</button></td>
+        </tr>`).join('')
+      : `<tr><td colspan="${admin?7:6}" class="tbl-empty">등록된 픽스쳐 없음</td></tr>`;
+
+    const mRows = mats.length
+      ? mats.map(m=>`<tr>
+          <td><span class="badge badge-gray">${m.category}</span></td>
+          <td>${m.name}${m.spec ? `<span style="font-size:11px;color:var(--gray-400);margin-left:4px">(${m.spec})</span>` : ''}</td>
+          <td>${m.unit||'개'}</td>
+          ${admin ? `<td class="text-right">${fmt.won(m.unit_price)}</td>` : ''}
+          <td><button class="btn btn-secondary btn-sm" onclick="Pages.editMatModal(${m.id})">수정</button>
+              <button class="btn btn-danger btn-sm" onclick="Pages.deleteMat(${m.id})">삭제</button></td>
+        </tr>`).join('')
+      : `<tr><td colspan="${admin?6:5}" class="tbl-empty">등록된 재료 없음</td></tr>`;
+
+    const vendorSection = !admin ? Pages._staffVendorBlock('임플란트', '임플란트 재료 거래처') : '';
+
+    // 직원에게도 제조사 & 분류 관리 제공
+    const s = DB.getSettings();
+    const _h = `<span class="drag-handle" title="드래그해서 순서 변경">⠿</span>`;
+    const companyMgmt = `
+      <div class="card" style="margin-top:16px">
+        <div class="card-header">
+          <div class="card-title">🏭 픽스쳐 제조사</div>
+          <button class="btn btn-primary btn-sm" onclick="Pages.editCompanyModal(null)">+ 추가</button>
+        </div>
+        ${(s.fixtureCompanies||[]).map((c,i) => `
+          <div class="s-item" draggable="true" data-list="companies" data-idx="${i}">
+            ${_h}
+            <div class="name">${c}</div>
+            <button class="btn btn-secondary btn-sm" onclick="Pages.editCompanyModal(${i})">수정</button>
+            <button class="btn btn-danger btn-sm" onclick="Pages.deleteCompany(${i})">삭제</button>
+          </div>`).join('') || '<div style="color:var(--gray-400);font-size:12px;padding:4px 0">등록된 제조사 없음</div>'}
+      </div>`;
+
+    const catMgmt = `
+      <div class="card" style="margin-top:16px">
+        <div class="card-header">
+          <div class="card-title">🗂 임플란트 재료 분류</div>
+          <button class="btn btn-primary btn-sm" onclick="Pages.editImplantCatModal(null)">+ 추가</button>
+        </div>
+        ${(s.implantMatCategories||[]).map((c,i) => `
+          <div class="s-item" draggable="true" data-list="matCats" data-idx="${i}">
+            ${_h}
+            <div class="name">${c.name} <span style="font-size:11px;color:var(--gray-400)">${c.trackInventory?'📦 재고관리':'📋 주문기록'}</span></div>
+            <button class="btn btn-secondary btn-sm" onclick="Pages.editImplantCatModal(${i})">수정</button>
+            <button class="btn btn-danger btn-sm" onclick="Pages.deleteImplantCat(${i})">삭제</button>
+          </div>`).join('') || '<div style="color:var(--gray-400);font-size:12px;padding:4px 0">등록된 분류 없음</div>'}
+      </div>`;
+
+    return `
+      <div class="two-col">
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <strong>픽스쳐 품목</strong>
+            <button class="btn btn-primary btn-sm" onclick="Pages.editFixtureModal(null)">+ 픽스쳐 추가</button>
+          </div>
+          <table><thead><tr><th>제조사</th><th>종류</th><th>직경</th><th>길이</th>${admin?'<th class="text-right">단가</th>':''}<th class="text-center">최소재고</th><th></th></tr></thead>
+          <tbody>${fRows}</tbody></table>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <strong>기타 임플란트 재료</strong>
+            <button class="btn btn-primary btn-sm" onclick="Pages.editMatModal(null)">+ 재료 추가</button>
+          </div>
+          <table><thead><tr><th>분류</th><th>품명</th><th>단위</th>${admin?'<th class="text-right">단가</th>':''}<th></th></tr></thead>
+          <tbody>${mRows}</tbody></table>
+        </div>
+      </div>
+      ${vendorSection}
+      <div class="two-col" style="margin-top:8px">
+        <div>${companyMgmt}</div>
+        <div>${catMgmt}</div>
+      </div>`;
+  },
+
+  // Fixture CRUD
+  editFixtureModal(id) {
+    const f = id ? DB.getFixtures().find(x => x.id === id) : null;
+    const coOpts = getCompanies().map(c => `<option value="${c}" ${f?.company===c?'selected':''}>${c}</option>`).join('');
+    showModal(`<div class="modal">
+      <div class="modal-title">${f?'픽스쳐 수정':'픽스쳐 추가'}</div>
+      <form onsubmit="Pages.saveFixture(event,${id||'null'})">
+        <div class="form-grid">
+          <div class="form-group"><label>제조사</label><select name="company">${coOpts}</select></div>
+          <div class="form-group"><label>제품 종류</label><input type="text" name="fixture_type" value="${f?.fixture_type||''}" placeholder="예: TSIII, TSIV, SS II, BL, SLA"></div>
+          <div class="form-group"><label>직경 (mm)</label><input type="number" name="diameter" value="${f?.diameter||''}" step="0.1" min="1" required placeholder="예: 3.5"></div>
+          <div class="form-group"><label>길이 (mm)</label><input type="number" name="length" value="${f?.length||''}" step="0.5" min="1" required placeholder="예: 10"></div>
+          ${Auth.isAdmin() ? `<div class="form-group"><label>단가 (원)</label><input type="number" name="unit_price" value="${f?.unit_price||''}" min="0" step="100" required placeholder="0"></div>` : ''}
+          <div class="form-group"><label>현재 재고 (개)</label><input type="number" name="stock" value="${f?.stock||0}" min="0" required></div>
+          <div class="form-group"><label>최소 재고 알림 (개)</label><input type="number" name="min_stock" value="${f?.min_stock||2}" min="0"></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  saveFixture(e, editId) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const data = DB.getFixtures();
+    const getPrice = (existing) => Auth.isAdmin() ? +f.get('unit_price') : (existing || 0);
+    const base = { company: f.get('company'), fixture_type: f.get('fixture_type'), diameter: +f.get('diameter'), length: +f.get('length'), stock: +f.get('stock'), min_stock: +f.get('min_stock') };
+    if (editId) {
+      const idx = data.findIndex(x => x.id === editId);
+      if (idx>=0) data[idx] = { ...data[idx], ...base, unit_price: getPrice(data[idx].unit_price) };
+    } else { data.push({ id: DB.nextId('fixture'), ...base, unit_price: getPrice(0) }); }
+    DB.saveFixtures(data);
+    closeModal();
+    Pages.implant(App.year, App.month);
+  },
+  deleteFixture(id) {
+    confirm2('이 픽스쳐를 삭제하시겠습니까?', () => {
+      DB.saveFixtures(DB.getFixtures().filter(x => x.id !== id));
+      Pages.implant(App.year, App.month);
+    });
+  },
+
+  // Implant Material CRUD
+  editMatModal(id) {
+    const m = id ? DB.getImplantMaterials().find(x => x.id === id) : null;
+    const catOpts = getImplantMatCats().map(c => `<option value="${c.name}" ${m?.category===c.name?'selected':''}>${c.name}${c.trackInventory?' 📦':''}</option>`).join('');
+    const needsInv = m ? isTrackInventory(m.category) : true;
+    showModal(`<div class="modal">
+      <div class="modal-title">${m?'재료 수정':'재료 추가'}</div>
+      <form onsubmit="Pages.saveMat(event,${id||'null'})">
+        ${vendorDatalist('vlist-mat', '임플란트')}
+        <div class="form-grid">
+          <div class="form-group"><label>분류</label><select name="category" onchange="Pages._matCatChanged(this)">${catOpts}</select></div>
+          <div class="form-group"><label>품명</label><input type="text" name="name" value="${m?.name||''}" required placeholder="재료명"></div>
+          <div class="form-group"><label>규격 (1개당 사이즈)</label><input type="text" name="spec" value="${m?.spec||''}" placeholder="예: 0.5g, 10mL, 3.5×10mm"></div>
+          <div class="form-group"><label>개수 단위</label><input type="text" name="unit" value="${m?.unit||'개'}" placeholder="개, 박스, 세트 등"></div>
+          <div class="form-group"><label>주거래처</label><input type="text" name="vendor" value="${m?.vendor||''}" list="vlist-mat" placeholder="거래처명 입력 또는 선택" required></div>
+          ${Auth.isAdmin() ? `<div class="form-group"><label>단가 (원/개)</label><input type="number" name="unit_price" value="${m?.unit_price||''}" min="0" step="100" placeholder="0"></div>` : ''}
+          <div class="form-group" id="mat-stock-group" style="${needsInv?'':'display:none'}"><label>현재 재고 (개수)</label><input type="number" name="stock" value="${m?.stock||0}" min="0"></div>
+          <div class="form-group" id="mat-minstock-group" style="${needsInv?'':'display:none'}"><label>최소 재고 알림 (개수)</label><input type="number" name="min_stock" value="${m?.min_stock||1}" min="0"></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  _matCatChanged(sel) {
+    const show = isTrackInventory(sel.value);
+    document.getElementById('mat-stock-group').style.display = show ? '' : 'none';
+    document.getElementById('mat-minstock-group').style.display = show ? '' : 'none';
+  },
+  saveMat(e, editId) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const cat = f.get('category');
+    const data = DB.getImplantMaterials();
+    const getPrice = (existing) => Auth.isAdmin() ? +f.get('unit_price') : (existing || 0);
+    const base = { category: cat, name: f.get('name'), spec: f.get('spec')||'', vendor: f.get('vendor'), unit: f.get('unit')||'개', stock: isTrackInventory(cat) ? +f.get('stock') : 0, min_stock: +f.get('min_stock')||1 };
+    if (editId) {
+      const idx = data.findIndex(x => x.id === editId);
+      if (idx>=0) data[idx] = { ...data[idx], ...base, unit_price: getPrice(data[idx].unit_price) };
+    } else { data.push({ id: DB.nextId('mat'), ...base, unit_price: getPrice(0) }); }
+    DB.saveImplantMaterials(data);
+    closeModal();
+    Pages.implant(App.year, App.month);
+  },
+  deleteMat(id) {
+    confirm2('이 재료를 삭제하시겠습니까?', () => {
+      DB.saveImplantMaterials(DB.getImplantMaterials().filter(x => x.id !== id));
+      Pages.implant(App.year, App.month);
+    });
+  },
+
+  // Usage Modal — 수술 1건에 재료 여러 개 입력
+  _usageRowCount: 0,
+  _usageItemOpts: '',
+
+  _buildItemOpts() {
+    const fixtures = DB.getFixtures();
+    const mats = DB.getImplantMaterials();
+    const fOpts = fixtures.length
+      ? fixtures.sort((a,b)=>a.company.localeCompare(b.company)||(a.fixture_type||'').localeCompare(b.fixture_type||'')||(+a.diameter)-(+b.diameter))
+          .map(f=>{ const t=f.fixture_type?` ${f.fixture_type}`:''; return `<option value="fixture_${f.id}">[${f.company}]${t} ${f.diameter}×${f.length}mm (재고:${f.stock})</option>`; }).join('')
+      : '';
+    const mOpts = mats.map(m=>{
+      if (getUsageOnlyCats().includes(m.category)) return '';
+      const spec = m.spec ? ` ${m.spec}` : '';
+      const s = isTrackInventory(m.category)?` (재고:${m.stock}${m.unit||'개'})`:'';
+      return `<option value="mat_${m.id}">[${m.category}] ${m.name}${spec}${s}</option>`;
+    }).join('');
+    return { fOpts, mOpts, hasItems: !!(fOpts||mOpts) };
+  },
+
+  _usageRowHtml(idx, fOpts, mOpts) {
+    return `<tr id="urow-${idx}">
+      <td style="min-width:260px">
+        <select name="item_key_${idx}" onchange="Pages._onUsageItemChange(${idx},this)" style="width:100%">
+          ${fOpts ? `<optgroup label="── 픽스쳐 ──">${fOpts}</optgroup>` : ''}
+          ${mOpts ? `<optgroup label="── 기타 재료 ──">${mOpts}</optgroup>` : ''}
+        </select>
+      </td>
+      <td><input type="text" name="tooth_${idx}" placeholder="#16" style="width:60px"></td>
+      <td><input type="number" name="qty_${idx}" value="1" min="1" style="width:55px" required></td>
+      <td><input type="text" name="memo_${idx}" placeholder="메모" style="width:110px"></td>
+      <td id="fail-cell-${idx}" style="text-align:center;min-width:50px"></td>
+      <td><button type="button" class="btn btn-danger btn-sm" onclick="Pages._removeUsageRow(${idx})">×</button></td>
+    </tr>`;
+  },
+
+  _onUsageItemChange(idx, sel) {
+    const val = sel.value || '';
+    const cell = document.getElementById(`fail-cell-${idx}`);
+    if (!cell) return;
+    if (val.startsWith('fixture_')) {
+      cell.innerHTML = `<label style="font-size:12px;cursor:pointer"><input type="checkbox" name="fail_${idx}" style="margin-right:3px">페일</label>`;
+    } else {
+      cell.innerHTML = '';
+    }
+  },
+
+  _removeUsageRow(idx) {
+    const row = document.getElementById(`urow-${idx}`);
+    if (row) row.remove();
+  },
+
+  addUsageModal() {
+    const { fOpts, mOpts, hasItems } = Pages._buildItemOpts();
+    if (!hasItems) { alert('등록된 임플란트 재료가 없습니다. [품목 관리]에서 먼저 추가해주세요.'); return; }
+    Pages._usageRowCount = 1;
+    Pages._usageItemOpts = JSON.stringify({ fOpts, mOpts });
+
+    showModal(`<div class="modal" style="max-width:760px">
+      <div class="modal-title">사용 기록 추가 <small style="font-weight:400;font-size:13px;color:var(--gray-400)">수술 1건 단위로 입력</small></div>
+      <form onsubmit="Pages.saveUsage(event)">
+        <div style="background:var(--primary-light);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
+            <div class="form-group" style="margin-bottom:0"><label>수술 날짜</label><input type="date" name="date" value="${today()}" required></div>
+            <div class="form-group" style="margin-bottom:0"><label>환자 이름</label><input type="text" name="patient_name" placeholder="홍길동" required></div>
+            <div class="form-group" style="margin-bottom:0"><label>환자 번호</label><input type="text" name="patient_no" placeholder="예: 202401"></div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong style="font-size:13px">사용 재료 목록</strong>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="Pages._appendUsageRow()">+ 재료 추가</button>
+        </div>
+        <div class="tbl-wrap" style="margin-bottom:12px">
+          <table style="width:100%">
+            <thead><tr><th>재료 선택</th><th>치식</th><th>수량</th><th>메모</th><th>페일</th><th></th></tr></thead>
+            <tbody id="usage-rows-body">
+              ${Pages._usageRowHtml(0, fOpts, mOpts)}
+            </tbody>
+          </table>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+    setTimeout(() => Pages._onUsageItemChange(0, document.querySelector('[name="item_key_0"]')), 0);
+  },
+
+  _appendUsageRow() {
+    const { fOpts, mOpts } = JSON.parse(Pages._usageItemOpts || '{}');
+    const tbody = document.getElementById('usage-rows-body');
+    if (!tbody) return;
+    const idx = Pages._usageRowCount++;
+    tbody.insertAdjacentHTML('beforeend', Pages._usageRowHtml(idx, fOpts, mOpts));
+    setTimeout(() => Pages._onUsageItemChange(idx, document.querySelector(`[name="item_key_${idx}"]`)), 0);
+  },
+
+  saveUsage(e) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const date = f.get('date');
+    const patient_name = f.get('patient_name');
+    const patient_no = f.get('patient_no');
+
+    const fixtures = DB.getFixtures();
+    const mats = DB.getImplantMaterials();
+    const fixtureUsage = DB.getFixtureUsage();
+    const matUsage = DB.getMatUsage();
+
+    // 재고 검증 먼저
+    for (let i = 0; i < Pages._usageRowCount; i++) {
+      const sel = document.querySelector(`[name="item_key_${i}"]`);
+      if (!sel || !document.getElementById(`urow-${i}`)) continue;
+      const val = sel.value;
+      if (!val) continue;
+      const [type, rawId] = val.split('_');
+      const id = +rawId;
+      const qty = +(document.querySelector(`[name="qty_${i}"]`)?.value || 1);
+      if (type === 'fixture') {
+        const fx = fixtures.find(x => x.id === id);
+        if (fx && fx.stock < qty) { alert(`재고 부족!\n${fx.company} ${fx.diameter}×${fx.length}mm\n현재 재고: ${fx.stock}개`); return; }
+      } else {
+        const mat = mats.find(x => x.id === id);
+        if (mat && isTrackInventory(mat.category) && mat.stock < qty) { alert(`재고 부족!\n${mat.name}\n현재 재고: ${mat.stock}${mat.unit||'개'}`); return; }
+      }
+    }
+
+    // 저장
+    for (let i = 0; i < Pages._usageRowCount; i++) {
+      const sel = document.querySelector(`[name="item_key_${i}"]`);
+      if (!sel || !document.getElementById(`urow-${i}`)) continue;
+      const val = sel.value;
+      if (!val) continue;
+      const [type, rawId] = val.split('_');
+      const id = +rawId;
+      const qty = +(document.querySelector(`[name="qty_${i}"]`)?.value || 1);
+      const tooth = document.querySelector(`[name="tooth_${i}"]`)?.value || '';
+      const memo = document.querySelector(`[name="memo_${i}"]`)?.value || '';
+      const fail = !!(document.querySelector(`[name="fail_${i}"]`)?.checked);
+
+      if (type === 'fixture') {
+        const fx = fixtures.find(x => x.id === id);
+        if (fx) { fx.stock -= qty; }
+        fixtureUsage.push({ id: DB.nextId('fusage'), date, patient_name, patient_no, tooth, fixture_id: id, quantity: qty, memo, fail });
+      } else {
+        const mat = mats.find(x => x.id === id);
+        if (mat && isTrackInventory(mat.category)) { mat.stock -= qty; }
+        matUsage.push({ id: DB.nextId('musage'), date, patient_name, patient_no, tooth, mat_id: id, quantity: qty, memo });
+      }
+    }
+
+    DB.saveFixtures(fixtures);
+    DB.saveImplantMaterials(mats);
+    DB.saveFixtureUsage(fixtureUsage);
+    DB.saveMatUsage(matUsage);
+    closeModal();
+    Pages.implant(App.year, App.month);
+  },
+  deleteUsage(id, type) {
+    confirm2('사용 기록을 삭제하시겠습니까? (재고는 자동으로 복원됩니다)', () => {
+      if (type === 'fixture') {
+        const usage = DB.getFixtureUsage();
+        const rec = usage.find(x => x.id === id);
+        if (rec) {
+          const fixtures = DB.getFixtures();
+          const fx = fixtures.find(x => x.id === rec.fixture_id);
+          if (fx) { fx.stock += rec.quantity; DB.saveFixtures(fixtures); }
+          DB.saveFixtureUsage(usage.filter(x => x.id !== id));
+        }
+      } else {
+        const usage = DB.getMatUsage();
+        const rec = usage.find(x => x.id === id);
+        if (rec) {
+          const mats = DB.getImplantMaterials();
+          const mat = mats.find(x => x.id === rec.mat_id);
+          if (mat && isTrackInventory(mat.category)) { mat.stock += rec.quantity; DB.saveImplantMaterials(mats); }
+          DB.saveMatUsage(usage.filter(x => x.id !== id));
+        }
+      }
+      Pages.implant(App.year, App.month);
+    });
+  },
+
+  _editDeleteIds: { fixture: [], mat: [] },
+
+  _removeExistingUsageRow(type, id) {
+    const row = document.getElementById('erow-' + type + '-' + id);
+    if (row) row.remove();
+    if (!Pages._editDeleteIds) Pages._editDeleteIds = { fixture: [], mat: [] };
+    (Pages._editDeleteIds[type] = Pages._editDeleteIds[type] || []).push(id);
+  },
+
+  editUsageGroupModal(encodedKey) {
+    const parts = decodeURIComponent(encodedKey).split('||');
+    const date = parts[0] || '';
+    const patientName = parts[1] || '';
+    const patientNo = parts[2] || '';
+
+    const fixtureUsage = DB.getFixtureUsage();
+    const matUsage = DB.getMatUsage();
+    const fixtures = DB.getFixtures();
+    const mats = DB.getImplantMaterials();
+
+    const groupFix = fixtureUsage.filter(r => r.date===date && (r.patient_name||'')===patientName && (r.patient_no||'')===patientNo);
+    const groupMat = matUsage.filter(r => r.date===date && (r.patient_name||'')===patientName && (r.patient_no||'')===patientNo);
+
+    const { fOpts, mOpts, hasItems } = Pages._buildItemOpts();
+    Pages._usageRowCount = 0;
+    Pages._usageItemOpts = JSON.stringify({ fOpts, mOpts });
+    Pages._editDeleteIds = { fixture: [], mat: [] };
+
+    const existingRows = [
+      ...groupFix.map(r => {
+        const fx = fixtures.find(x => x.id === r.fixture_id);
+        const label = fx ? `[${fx.company}]${fx.fixture_type?' '+fx.fixture_type:''} ${fx.diameter}×${fx.length}mm` : '알 수 없음';
+        return `<tr id="erow-fixture-${r.id}" data-etype="fixture" data-eid="${r.id}">
+          <td style="font-size:13px;min-width:200px">${label}</td>
+          <td><input type="text" name="etooth_fixture_${r.id}" value="${r.tooth||''}" style="width:60px" placeholder="#16"></td>
+          <td><input type="number" name="eqty_fixture_${r.id}" value="${r.quantity}" min="1" style="width:55px" required></td>
+          <td><input type="text" name="ememo_fixture_${r.id}" value="${r.memo||''}" style="width:110px" placeholder="메모"></td>
+          <td style="text-align:center"><label style="font-size:12px;cursor:pointer"><input type="checkbox" name="efail_fixture_${r.id}" ${r.fail?'checked':''}> 페일</label></td>
+          <td><button type="button" class="btn btn-danger btn-sm" onclick="Pages._removeExistingUsageRow('fixture',${r.id})">×</button></td>
+        </tr>`;
+      }),
+      ...groupMat.map(r => {
+        const mat = mats.find(x => x.id === r.mat_id);
+        const label = mat ? `[${mat.category}] ${mat.name}${mat.spec?' '+mat.spec:''}` : '알 수 없음';
+        return `<tr id="erow-mat-${r.id}" data-etype="mat" data-eid="${r.id}">
+          <td style="font-size:13px;min-width:200px">${label}</td>
+          <td><input type="text" name="etooth_mat_${r.id}" value="${r.tooth||''}" style="width:60px" placeholder="#16"></td>
+          <td><input type="number" name="eqty_mat_${r.id}" value="${r.quantity}" min="1" style="width:55px" required></td>
+          <td><input type="text" name="ememo_mat_${r.id}" value="${r.memo||''}" style="width:110px" placeholder="메모"></td>
+          <td></td>
+          <td><button type="button" class="btn btn-danger btn-sm" onclick="Pages._removeExistingUsageRow('mat',${r.id})">×</button></td>
+        </tr>`;
+      }),
+    ].join('');
+
+    showModal(`<div class="modal" style="max-width:780px">
+      <div class="modal-title">사용 기록 수정</div>
+      <form onsubmit="Pages.saveUsageGroup(event)">
+        <div style="background:var(--primary-light);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
+            <div class="form-group" style="margin-bottom:0"><label>수술 날짜</label><input type="date" name="date" value="${date}" required></div>
+            <div class="form-group" style="margin-bottom:0"><label>환자 이름</label><input type="text" name="patient_name" value="${patientName}" required></div>
+            <div class="form-group" style="margin-bottom:0"><label>환자 번호</label><input type="text" name="patient_no" value="${patientNo}" placeholder="차트번호"></div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong style="font-size:13px">사용 재료 목록</strong>
+          ${hasItems ? `<button type="button" class="btn btn-secondary btn-sm" onclick="Pages._appendUsageRow()">+ 재료 추가</button>` : ''}
+        </div>
+        <div class="tbl-wrap" style="margin-bottom:12px">
+          <table style="width:100%">
+            <thead><tr><th>재료</th><th>치식</th><th>수량</th><th>메모</th><th>페일</th><th></th></tr></thead>
+            <tbody id="usage-rows-body">${existingRows}</tbody>
+          </table>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+
+  saveUsageGroup(e) {
+    e.preventDefault();
+    const form = e.target;
+    const f = new FormData(form);
+    const newDate = f.get('date');
+    const newName = f.get('patient_name');
+    const newNo = f.get('patient_no');
+
+    const fixtureUsage = DB.getFixtureUsage();
+    const matUsage = DB.getMatUsage();
+    const fixtures = DB.getFixtures();
+    const mats = DB.getImplantMaterials();
+
+    const delFix = Pages._editDeleteIds?.fixture || [];
+    const delMat = Pages._editDeleteIds?.mat || [];
+
+    // 삭제된 기록 재고 복원
+    delFix.forEach(id => {
+      const rec = fixtureUsage.find(x => x.id === id);
+      if (rec) { const fx = fixtures.find(x => x.id === rec.fixture_id); if (fx) fx.stock += rec.quantity; }
+    });
+    delMat.forEach(id => {
+      const rec = matUsage.find(x => x.id === id);
+      if (rec) { const mat = mats.find(x => x.id === rec.mat_id); if (mat && isTrackInventory(mat.category)) mat.stock += rec.quantity; }
+    });
+    const newFix = fixtureUsage.filter(r => !delFix.includes(r.id));
+    const newMat = matUsage.filter(r => !delMat.includes(r.id));
+
+    // 기존 항목 수정
+    const tbody = document.getElementById('usage-rows-body');
+    tbody.querySelectorAll('[data-etype]').forEach(row => {
+      const etype = row.dataset.etype;
+      const eid = +row.dataset.eid;
+      if (etype === 'fixture') {
+        const rec = newFix.find(x => x.id === eid);
+        if (rec) {
+          rec.date = newDate; rec.patient_name = newName; rec.patient_no = newNo;
+          rec.tooth = f.get('etooth_fixture_' + eid) || '';
+          rec.quantity = +(f.get('eqty_fixture_' + eid) || 1);
+          rec.memo = f.get('ememo_fixture_' + eid) || '';
+          rec.fail = !!form.querySelector('[name="efail_fixture_' + eid + '"]')?.checked;
+        }
+      } else {
+        const rec = newMat.find(x => x.id === eid);
+        if (rec) {
+          rec.date = newDate; rec.patient_name = newName; rec.patient_no = newNo;
+          rec.tooth = f.get('etooth_mat_' + eid) || '';
+          rec.quantity = +(f.get('eqty_mat_' + eid) || 1);
+          rec.memo = f.get('ememo_mat_' + eid) || '';
+        }
+      }
+    });
+
+    // 새로 추가된 항목 저장
+    for (let i = 0; i < Pages._usageRowCount; i++) {
+      const sel = document.querySelector('[name="item_key_' + i + '"]');
+      if (!sel || !document.getElementById('urow-' + i)) continue;
+      const val = sel.value; if (!val) continue;
+      const [type, rawId] = val.split('_');
+      const id = +rawId;
+      const qty = +(document.querySelector('[name="qty_' + i + '"]')?.value || 1);
+      const tooth = document.querySelector('[name="tooth_' + i + '"]')?.value || '';
+      const memo = document.querySelector('[name="memo_' + i + '"]')?.value || '';
+      if (type === 'fixture') {
+        const fail = !!document.querySelector('[name="fail_' + i + '"]')?.checked;
+        const fx = fixtures.find(x => x.id === id);
+        if (fx && fx.stock < qty) { alert('재고 부족: ' + fx.company + ' ' + fx.diameter + '×' + fx.length + 'mm'); return; }
+        if (fx) fx.stock -= qty;
+        newFix.push({ id: DB.nextId('fusage'), date: newDate, patient_name: newName, patient_no: newNo, tooth, fixture_id: id, quantity: qty, memo, fail });
+      } else {
+        const mat = mats.find(x => x.id === id);
+        if (mat && isTrackInventory(mat.category) && mat.stock < qty) { alert('재고 부족: ' + mat.name); return; }
+        if (mat && isTrackInventory(mat.category)) mat.stock -= qty;
+        newMat.push({ id: DB.nextId('musage'), date: newDate, patient_name: newName, patient_no: newNo, tooth, mat_id: id, quantity: qty, memo });
+      }
+    }
+
+    DB.saveFixtures(fixtures);
+    DB.saveImplantMaterials(mats);
+    DB.saveFixtureUsage(newFix);
+    DB.saveMatUsage(newMat);
+    closeModal();
+    Pages.implant(App.year, App.month);
+  },
+
+  // ── 주문 모달 ──
+  _orderRowCount: 0,
+  _orderItemOptsCache: '',
+  _buildOrderItemOpts() {
+    const fixtures = DB.getFixtures().sort((a,b)=>a.company.localeCompare(b.company)||(a.fixture_type||'').localeCompare(b.fixture_type||'')||(+a.diameter)-(+b.diameter));
+    const allMats = DB.getImplantMaterials();
+    const fOpts = fixtures.map(f => { const t = f.fixture_type ? ` ${f.fixture_type}` : ''; return `<option value="fixture_${f.id}" data-price="${f.unit_price||0}">[${f.company}]${t} ${f.diameter}×${f.length}mm</option>`; }).join('');
+    const mOpts = allMats.map(m => { const spec = m.spec ? ` ${m.spec}` : ''; return `<option value="mat_${m.id}" data-price="${m.unit_price||0}">[${m.category}] ${m.name}${spec}</option>`; }).join('');
+    return { fOpts, mOpts };
+  },
+  _orderItemRowHtml(idx, fOpts, mOpts, showPrice) {
+    return `<tr id="orow-${idx}">
+      <td style="min-width:240px">
+        <select name="item_key_${idx}" onchange="Pages._oItemChange(${idx},this)" style="width:100%" required>
+          ${fOpts ? `<optgroup label="── 픽스쳐 ──">${fOpts}</optgroup>` : ''}
+          ${mOpts ? `<optgroup label="── 기타 재료 ──">${mOpts}</optgroup>` : ''}
+        </select>
+      </td>
+      <td><input type="number" name="qty_${idx}" value="1" min="1" style="width:60px" required onchange="Pages._oCalcRow(${idx})"></td>
+      ${showPrice ? `<td><input type="number" name="price_${idx}" value="" min="0" step="100" style="width:90px" placeholder="0" onchange="Pages._oCalcRow(${idx})"></td>
+      <td><input type="number" name="total_${idx}" readonly style="width:90px;background:var(--gray-50)"></td>` : ''}
+      <td><button type="button" class="btn btn-danger btn-sm" onclick="Pages._oRemoveRow(${idx})">×</button></td>
+    </tr>`;
+  },
+  _oItemChange(idx, sel) {
+    const price = sel?.options[sel.selectedIndex]?.dataset.price;
+    const priceEl = document.querySelector(`[name="price_${idx}"]`);
+    if (priceEl && price !== undefined) { priceEl.value = price; Pages._oCalcRow(idx); }
+  },
+  _oCalcRow(idx) {
+    const qty   = +(document.querySelector(`[name="qty_${idx}"]`)?.value) || 0;
+    const price = +(document.querySelector(`[name="price_${idx}"]`)?.value) || 0;
+    const tot   = document.querySelector(`[name="total_${idx}"]`);
+    if (tot) tot.value = qty * price;
+  },
+  _oRemoveRow(idx) {
+    document.getElementById(`orow-${idx}`)?.remove();
+  },
+  _oAppendRow() {
+    const { fOpts, mOpts } = Pages._buildOrderItemOpts();
+    const showPrice = Auth.isAdmin();
+    const tbody = document.getElementById('order-items-body');
+    if (!tbody) return;
+    const idx = Pages._orderRowCount++;
+    tbody.insertAdjacentHTML('beforeend', Pages._orderItemRowHtml(idx, fOpts, mOpts, showPrice));
+    setTimeout(() => Pages._oItemChange(idx, document.querySelector(`[name="item_key_${idx}"]`)), 0);
+  },
+  addOrderModal(groupId) {
+    const admin = Auth.isAdmin();
+    const { fOpts, mOpts } = this._buildOrderItemOpts();
+    Pages._orderRowCount = 0;
+
+    // 기존 주문서 편집 모드
+    let editGroup = null;
+    let headerDate = today(), headerVendor = '', headerMemo = '', headerStatus = '주문서 작성';
+    let existingRows = '';
+    if (groupId !== undefined) {
+      const allOrders = DB.getImplantOrders();
+      const groupItems = allOrders.filter(x => (x.order_group_id || x.id) === groupId);
+      if (groupItems.length) {
+        editGroup = groupItems;
+        headerDate = groupItems[0].date;
+        headerVendor = groupItems[0].vendor || '';
+        headerMemo = groupItems[0].memo || '';
+        headerStatus = groupItems[0].status || '주문서 작성';
+        existingRows = groupItems.map(item => {
+          const idx = Pages._orderRowCount++;
+          const selOpts = (fOpts ? `<optgroup label="── 픽스쳐 ──">${fOpts}</optgroup>` : '') + (mOpts ? `<optgroup label="── 기타 재료 ──">${mOpts}</optgroup>` : '');
+          const key = `${item.item_type}_${item.item_id}`;
+          // selected 반영은 setTimeout으로
+          return `<tr id="orow-${idx}" data-preset-key="${key}" data-preset-qty="${item.quantity}" data-preset-price="${item.unit_price||0}" data-item-record-id="${item.id}">
+            <td style="min-width:240px">
+              <select name="item_key_${idx}" onchange="Pages._oItemChange(${idx},this)" style="width:100%" required>
+                ${selOpts}
+              </select>
+            </td>
+            <td><input type="number" name="qty_${idx}" value="${item.quantity}" min="1" style="width:60px" required onchange="Pages._oCalcRow(${idx})"></td>
+            ${admin ? `<td><input type="number" name="price_${idx}" value="${item.unit_price||0}" min="0" step="100" style="width:90px" onchange="Pages._oCalcRow(${idx})"></td>
+            <td><input type="number" name="total_${idx}" value="${item.total||0}" readonly style="width:90px;background:var(--gray-50)"></td>` : ''}
+            <td><button type="button" class="btn btn-danger btn-sm" onclick="Pages._oRemoveRow(${idx})">×</button></td>
+          </tr>`;
+        }).join('');
+      }
+    }
+
+    const priceHeader = admin ? '<th>단가</th><th>합계</th>' : '';
+    const firstRowHtml = existingRows || this._orderItemRowHtml(Pages._orderRowCount++, fOpts, mOpts, admin);
+
+    showModal(`<div class="modal" style="max-width:680px">
+      <div class="modal-title">${groupId !== undefined ? '주문서 수정' : '주문서 작성'}</div>
+      <form onsubmit="Pages.saveImplantOrder(event,${groupId !== undefined ? groupId : 'null'})">
+        ${vendorDatalist('vlist-implant-order', '임플란트')}
+        <div class="form-grid" style="margin-bottom:12px">
+          <div class="form-group">
+            <label>상태</label>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:7px 12px;border-radius:6px;border:2px solid #f97316;background:#fff7ed;font-weight:600;font-size:13px">
+                <input type="radio" name="status" value="주문서 작성" ${headerStatus==='주문서 작성'?'checked':''} style="accent-color:#f97316"> 주문서 작성
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:7px 12px;border-radius:6px;border:2px solid #22c55e;background:#f0fdf4;font-weight:600;font-size:13px">
+                <input type="radio" name="status" value="입고확인" ${headerStatus==='입고확인'?'checked':''} style="accent-color:#22c55e"> 입고확인
+              </label>
+            </div>
+          </div>
+          <div class="form-group"><label>날짜</label><input type="date" name="date" value="${headerDate}" required></div>
+          <div class="form-group"><label>거래처</label><input type="text" name="vendor" list="vlist-implant-order" value="${headerVendor}" placeholder="거래처명 입력 또는 선택" required></div>
+          <div class="form-group" style="grid-column:1/-1"><label>비고/메모</label><input type="text" name="memo" value="${headerMemo}" placeholder="발주번호, 특이사항 등"></div>
+        </div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:6px">품목 목록</div>
+        <div class="tbl-wrap" style="margin-bottom:8px"><table style="width:100%">
+          <thead><tr><th>품목</th><th>수량</th>${priceHeader}<th></th></tr></thead>
+          <tbody id="order-items-body">${firstRowHtml}</tbody>
+        </table></div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="Pages._oAppendRow()" style="margin-bottom:16px">+ 품목 추가</button>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+
+    // 편집 모드: select 값 preset
+    if (editGroup) {
+      setTimeout(() => {
+        document.querySelectorAll('#order-items-body tr[data-preset-key]').forEach(row => {
+          const idx = row.id.replace('orow-','');
+          const sel = document.querySelector(`[name="item_key_${idx}"]`);
+          if (sel) { sel.value = row.dataset.presetKey; Pages._oCalcRow(idx); }
+        });
+      }, 0);
+    } else {
+      setTimeout(() => Pages._oItemChange(0, document.querySelector('[name="item_key_0"]')), 0);
+    }
+  },
+  saveImplantOrder(e, editGroupId) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const date   = f.get('date');
+    const vendor = f.get('vendor');
+    const memo   = f.get('memo') || '';
+    const status = f.get('status') || '주문서 작성';
+    const admin  = Auth.isAdmin();
+
+    // 품목 행 수집
+    const tbody = document.getElementById('order-items-body');
+    const rowIds = [...tbody.querySelectorAll('tr')].map(r => r.id.replace('orow-',''));
+    if (!rowIds.length) { alert('품목을 하나 이상 추가해주세요.'); return; }
+
+    const newItems = [];
+    for (const idx of rowIds) {
+      const itemKey = f.get(`item_key_${idx}`);
+      if (!itemKey) continue;
+      const [type, rawId] = itemKey.split('_');
+      const itemId = +rawId;
+      const qty = +f.get(`qty_${idx}`) || 1;
+      const unitPrice = admin ? (+f.get(`price_${idx}`)||0)
+        : (type === 'fixture' ? (DB.getFixtures().find(x=>x.id===itemId)?.unit_price||0)
+                               : (DB.getImplantMaterials().find(x=>x.id===itemId)?.unit_price||0));
+      const total = admin ? (+f.get(`total_${idx}`)||qty*unitPrice) : qty*unitPrice;
+      let itemName = '';
+      if (type === 'fixture') { const fx = DB.getFixtures().find(x=>x.id===itemId); if(fx) itemName=`[${fx.company}] 픽스쳐 ${fx.diameter}×${fx.length}mm`; }
+      else { const mat = DB.getImplantMaterials().find(x=>x.id===itemId); if(mat) itemName=`[${mat.category}] ${mat.name}`; }
+      newItems.push({ item_type: type, item_id: itemId, item_name: itemName, quantity: qty, unit_price: unitPrice, total });
+    }
+    if (!newItems.length) { alert('품목을 하나 이상 추가해주세요.'); return; }
+
+    let orders = DB.getImplantOrders();
+    const groupId = editGroupId !== null && editGroupId !== undefined ? editGroupId : (Math.max(0, ...orders.map(o => o.order_group_id||0)) + 1);
+
+    if (editGroupId !== null && editGroupId !== undefined) {
+      // 기존 그룹 삭제 — 품목별 item_status 기준으로 재고 복원
+      const oldGroup = orders.filter(x => (x.order_group_id||x.id) === editGroupId);
+      oldGroup.filter(r => r.item_status === '입고확인').forEach(rec => {
+        if (rec.item_type === 'fixture') { const fxs = DB.getFixtures(); const fx = fxs.find(x=>x.id===rec.item_id); if(fx){fx.stock=Math.max(0,fx.stock-rec.quantity);DB.saveFixtures(fxs);} }
+        else { const ms = DB.getImplantMaterials(); const m = ms.find(x=>x.id===rec.item_id); if(m&&isTrackInventory(m.category)){m.stock=Math.max(0,m.stock-rec.quantity);DB.saveImplantMaterials(ms);} }
+      });
+      orders = orders.filter(x => (x.order_group_id||x.id) !== editGroupId);
+    }
+
+    // 새 항목 저장 및 재고 반영
+    // 새 항목은 item_status 없이 저장 (입고확인/반품 신청은 품목별로 별도 처리)
+    newItems.forEach(item => {
+      orders.push({ id: DB.nextId('iorder'), order_group_id: groupId, date, vendor, status, memo, item_status: '', item_type: item.item_type, item_id: item.item_id, item_name: item.item_name, quantity: item.quantity, unit_price: item.unit_price, total: item.total });
+    });
+
+    DB.saveImplantOrders(orders);
+    closeModal();
+    Pages.implant(App.year, App.month);
+  },
+  // 주문서 그룹 상태 변경 (주문서 작성 ↔ 주문서 발행 완료) — 재고 조정 없음
+  setOrderStatus(groupId, newStatus) {
+    const orders = DB.getImplantOrders();
+    const group = orders.filter(x => (x.order_group_id || x.id) === groupId);
+    if (!group.length) return;
+    group.forEach(rec => { rec.status = newStatus; });
+    DB.saveImplantOrders(orders);
+    Pages.implant(App.year, App.month);
+  },
+  // 품목별 상태 변경 (입고확인 / 반품 신청) — 재고 조정 포함
+  setItemStatus(itemId, newItemStatus) {
+    const orders = DB.getImplantOrders();
+    const rec = orders.find(x => x.id === itemId);
+    if (!rec) return;
+    const oldItemStatus = rec.item_status || '';
+    if (oldItemStatus === newItemStatus) return;
+
+    const wasIn = oldItemStatus === '입고확인';
+    const nowIn = newItemStatus === '입고확인';
+    if (wasIn !== nowIn) {
+      if (rec.item_type === 'fixture') {
+        const fxs = DB.getFixtures(); const fx = fxs.find(x => x.id === rec.item_id);
+        if (fx) { fx.stock = nowIn ? fx.stock + rec.quantity : Math.max(0, fx.stock - rec.quantity); DB.saveFixtures(fxs); }
+      } else {
+        const ms = DB.getImplantMaterials(); const m = ms.find(x => x.id === rec.item_id);
+        if (m && isTrackInventory(m.category)) { m.stock = nowIn ? m.stock + rec.quantity : Math.max(0, m.stock - rec.quantity); DB.saveImplantMaterials(ms); }
+      }
+    }
+    rec.item_status = newItemStatus;
+    DB.saveImplantOrders(orders);
+    Pages.implant(App.year, App.month);
+  },
+  deleteImplantOrder(groupId) {
+    const orders = DB.getImplantOrders();
+    const group = orders.filter(x => (x.order_group_id||x.id) === groupId);
+    const hasConfirmed = group.some(r => r.item_status === '입고확인');
+    const msg = hasConfirmed ? '이 주문서를 삭제하시겠습니까? (입고확인된 품목의 재고가 자동으로 차감됩니다)' : '이 주문서를 삭제하시겠습니까?';
+    confirm2(msg, () => {
+      const orders2 = DB.getImplantOrders();
+      const group2 = orders2.filter(x => (x.order_group_id||x.id) === groupId);
+      // 입고확인된 품목만 재고 복원
+      group2.filter(r => r.item_status === '입고확인').forEach(rec => {
+        if (rec.item_type === 'fixture') { const fxs = DB.getFixtures(); const fx = fxs.find(x=>x.id===rec.item_id); if(fx){fx.stock=Math.max(0,fx.stock-rec.quantity);DB.saveFixtures(fxs);} }
+        else { const ms = DB.getImplantMaterials(); const m = ms.find(x=>x.id===rec.item_id); if(m&&isTrackInventory(m.category)){m.stock=Math.max(0,m.stock-rec.quantity);DB.saveImplantMaterials(ms);} }
+      });
+      DB.saveImplantOrders(orders2.filter(x => (x.order_group_id||x.id) !== groupId));
+      Pages.implant(App.year, App.month);
+    });
+  },
+  quickIncomingFixture(id) {
+    const fx = DB.getFixtures().find(x => x.id === id);
+    if (!fx) return;
+    const admin = Auth.isAdmin();
+    showModal(`<div class="modal" style="max-width:380px">
+      <div class="modal-title">빠른 주문<small>[${fx.company}] ${fx.diameter}×${fx.length}mm</small></div>
+      <form onsubmit="Pages.saveQuickIncoming(event,'fixture',${id})">
+        ${vendorDatalist('vlist-qi-fix', '임플란트')}
+        <div class="form-grid">
+          <div class="form-group"><label>날짜</label><input type="date" name="date" value="${today()}" required></div>
+          <div class="form-group"><label>수량 (개)</label><input type="number" name="quantity" value="1" min="1" required></div>
+          ${admin ? `<div class="form-group"><label>단가 (원)</label><input type="number" name="unit_price" value="${fx.unit_price}" min="0" step="100" required></div>` : ''}
+          <div class="form-group" style="grid-column:1/-1"><label>거래처</label><input type="text" name="vendor" list="vlist-qi-fix" placeholder="거래처명 입력 또는 선택" required></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">주문</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  quickIncomingMat(id) {
+    const mat = DB.getImplantMaterials().find(x => x.id === id);
+    if (!mat) return;
+    const admin = Auth.isAdmin();
+    showModal(`<div class="modal" style="max-width:380px">
+      <div class="modal-title">빠른 주문<small>${mat.name}</small></div>
+      <form onsubmit="Pages.saveQuickIncoming(event,'mat',${id})">
+        ${vendorDatalist('vlist-qi-mat', '임플란트')}
+        <div class="form-grid">
+          <div class="form-group"><label>날짜</label><input type="date" name="date" value="${today()}" required></div>
+          <div class="form-group"><label>수량 (${mat.unit||'개'})</label><input type="number" name="quantity" value="1" min="1" required></div>
+          ${admin ? `<div class="form-group"><label>단가 (원)</label><input type="number" name="unit_price" value="${mat.unit_price}" min="0" step="100" required></div>` : ''}
+          <div class="form-group" style="grid-column:1/-1"><label>거래처</label><input type="text" name="vendor" list="vlist-qi-mat" placeholder="거래처명 입력 또는 선택" required></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">주문</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  saveQuickIncoming(e, type, id) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const qty = +f.get('quantity');
+    const unitPrice = Auth.isAdmin() ? +f.get('unit_price') : (type === 'fixture'
+      ? (DB.getFixtures().find(x=>x.id===id)?.unit_price||0)
+      : (DB.getImplantMaterials().find(x=>x.id===id)?.unit_price||0));
+    let itemName = '';
+
+    if (type === 'fixture') {
+      const fx = DB.getFixtures().find(x => x.id === id);
+      if (fx) itemName = `[${fx.company}] 픽스쳐 ${fx.diameter}×${fx.length}mm`;
+    } else {
+      const mat = DB.getImplantMaterials().find(x => x.id === id);
+      if (mat) itemName = `[${mat.category}] ${mat.name}`;
+    }
+
+    const orders = DB.getImplantOrders();
+    orders.push({ id: DB.nextId('iorder'), date: f.get('date'), status: '주문서 작성', item_type: type, item_id: id, item_name: itemName, vendor: f.get('vendor'), quantity: qty, unit_price: unitPrice, total: qty * unitPrice, memo: '' });
+    DB.saveImplantOrders(orders);
+    closeModal();
+    Pages.implant(App.year, App.month);
+  },
+
+  // ─── GENERAL DENTAL MATERIALS ───
+  general(y, m) {
+    const admin = Auth.isAdmin();
+    const data = DB.getGeneralOrders().filter(r => inMonth(r.date, y, m));
+    const sorted = [...data].sort((a,b) => b.date.localeCompare(a.date));
+
+    const statusBadge = s => (s||'주문') === '주문'
+      ? `<span class="badge badge-orange">주문</span>`
+      : (s === '반품')
+        ? `<span class="badge" style="background:#fee2e2;color:#dc2626">반품</span>`
+        : `<span class="badge badge-green">입고확인</span>`;
+
+    const totalAmount = sum(sorted.filter(r=>(r.status||'주문')==='입고확인'), r => r.total_amount||0);
+
+    const rows = sorted.length
+      ? sorted.map(r => {
+          const st = r.status || '주문';
+          const rowCls = st === '주문' ? 'status-order' : st === '반품' ? '' : 'status-received';
+          const rowStyle = st === '반품' ? ' style="background:#fff5f5"' : '';
+          const actionBtns = st === '주문'
+            ? `<button class="btn btn-sm" style="background:#22c55e;color:#fff" onclick="Pages.setGeneralStatus(${r.id},'입고확인')">입고확인</button>
+               <button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="Pages.setGeneralStatus(${r.id},'반품')">반품</button>`
+            : st === '반품'
+              ? `<button class="btn btn-secondary btn-sm" onclick="Pages.setGeneralStatus(${r.id},'주문')">주문으로</button>`
+              : `<button class="btn btn-secondary btn-sm" onclick="Pages.setGeneralStatus(${r.id},'주문')">취소</button>
+                 <button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="Pages.setGeneralStatus(${r.id},'반품')">반품</button>`;
+          return `<tr class="${rowCls}"${rowStyle}>
+            <td>${statusBadge(st)}</td>
+            <td>${fmt.dateFull(r.date)}</td>
+            <td>${r.vendor||''}</td>
+            <td>${r.description||''}</td>
+            <td class="text-center" style="font-size:12px">${r.quantity||'-'}</td>
+            ${admin ? `<td class="text-right amount" style="${st==='반품'?'color:var(--red)':''}">${r.total_amount ? fmt.won(r.total_amount) : '-'}</td>` : ''}
+            <td style="color:var(--gray-400);font-size:12px">${r.note||''}</td>
+            <td style="white-space:nowrap">
+              ${actionBtns}
+              <button class="btn btn-secondary btn-sm" onclick="Pages.addGeneralOrderModal(${JSON.stringify(r).replace(/"/g,'&quot;')})">수정</button>
+              <button class="btn btn-danger btn-sm" onclick="Pages.deleteGeneralOrder(${r.id})">삭제</button>
+            </td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="${admin?8:7}" class="tbl-empty">이번 달 일반 재료 주문 내역이 없습니다</td></tr>`;
+
+    const vendorSection = Pages._staffVendorBlock('일반재료', '일반 치과재료 거래처');
+
+    document.getElementById('content').innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">일반 치과 재료 주문</div>
+            ${admin && totalAmount ? `<div style="font-size:12px;color:var(--gray-400)">이달 입고확인 합계: <strong>${fmt.won(totalAmount)}</strong></div>` : ''}
+          </div>
+          <button class="btn btn-primary" onclick="Pages.addGeneralOrderModal()">+ 주문 추가</button>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>상태</th><th>날짜</th><th>거래처</th><th>내용</th><th class="text-center">수량</th>${admin?'<th class="text-right">금액합계</th>':''}<th>메모</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </div>
+      ${vendorSection}`;
+    Pages._bindDrag();
+  },
+  setGeneralStatus(id, newStatus) {
+    const data = DB.getGeneralOrders();
+    const rec = data.find(r => r.id === id);
+    if (!rec || rec.status === newStatus) return;
+    rec.status = newStatus;
+    DB.saveGeneralOrders(data);
+    Pages.general(App.year, App.month);
+  },
+  addGeneralOrderModal(edit) {
+    const history = DB.getGeneralOrders();
+    const seen = new Set();
+    const histItems = history.filter(r => {
+      const key = `${r.vendor}||${r.description}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(-50).reverse();
+
+    const vendorList = vendorDatalist('vlist-general', '일반재료');
+    const descList = `<datalist id="dlist-general">${[...new Set(history.map(r=>r.description))].map(d=>`<option value="${d}">`).join('')}</datalist>`;
+
+    const histRows = histItems.length ? histItems.map(r =>
+      `<tr style="cursor:pointer" onclick="Pages._fillGeneralFromHistory('${r.vendor.replace(/'/g,"\\'")}','${r.description.replace(/'/g,"\\'")}')">
+        <td>${r.vendor}</td><td>${r.description}</td>
+      </tr>`).join('') : `<tr><td colspan="2" class="tbl-empty">이전 주문 내역 없음</td></tr>`;
+
+    const admin = Auth.isAdmin();
+    const curStatus = edit?.status || '주문';
+
+    showModal(`<div class="modal" style="max-width:600px">
+      <div class="modal-title">${edit?'수정':'일반 재료 주문 추가'}</div>
+      ${vendorList}${descList}
+      ${!edit ? `<details style="margin-bottom:16px;border:1px solid var(--gray-200);border-radius:6px;overflow:hidden">
+        <summary style="padding:9px 12px;cursor:pointer;font-size:13px;font-weight:600;background:var(--gray-50);user-select:none">
+          📋 이전 주문에서 선택 <span style="font-weight:400;color:var(--gray-400)">(클릭하면 자동 입력)</span>
+        </summary>
+        <div style="max-height:180px;overflow-y:auto">
+          <table style="width:100%"><thead><tr><th>거래처</th><th>내용</th></tr></thead>
+          <tbody>${histRows}</tbody></table>
+        </div>
+      </details>` : ''}
+      <form id="general-order-form" onsubmit="Pages.saveGeneralOrder(event,${edit?.id||'null'})">
+        <div class="form-grid">
+          <div class="form-group" style="grid-column:1/-1">
+            <label>상태</label>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:7px 14px;border-radius:6px;border:2px solid #f97316;background:#fff7ed;font-weight:600;font-size:13px">
+                <input type="radio" name="status" value="주문" ${curStatus==='주문'?'checked':''} style="accent-color:#f97316"> 주문
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:7px 14px;border-radius:6px;border:2px solid #22c55e;background:#f0fdf4;font-weight:600;font-size:13px">
+                <input type="radio" name="status" value="입고확인" ${curStatus==='입고확인'?'checked':''} style="accent-color:#22c55e"> 입고확인
+              </label>
+            </div>
+          </div>
+          <div class="form-group"><label>날짜</label><input type="date" name="date" value="${edit?.date||today()}" required></div>
+          <div class="form-group"><label>거래처</label><input id="go-vendor" type="text" name="vendor" value="${edit?.vendor||''}" list="vlist-general" placeholder="거래처명 입력 또는 선택" required></div>
+          <div class="form-group" style="grid-column:1/-1"><label>주문 내용</label><input id="go-desc" type="text" name="description" value="${edit?.description||''}" list="dlist-general" placeholder="주문한 재료 내용" required></div>
+          <div class="form-group"><label>수량</label><input type="number" name="quantity" value="${edit?.quantity||''}" min="1" placeholder="예: 5"></div>
+          ${admin ? `
+          <div class="form-group"><label>단가 (원)</label><input type="number" id="go-unit-price" name="unit_price" value="${edit?.unit_price||''}" min="0" step="100" placeholder="0" onchange="Pages._calcGeneralTotal()"></div>
+          <div class="form-group"><label>주문 금액 합계 (원)</label><input type="number" id="go-total" name="total_amount" value="${edit?.total_amount||''}" min="0" step="100" placeholder="0 (직접 입력 또는 자동계산)"></div>` : ''}
+          <div class="form-group" style="grid-column:1/-1"><label>메모</label><input type="text" name="note" value="${edit?.note||''}" placeholder="납기, 발주번호 등"></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  _calcGeneralTotal() {
+    const qty = +(document.querySelector('[name="quantity"]')?.value)||0;
+    const price = +(document.getElementById('go-unit-price')?.value)||0;
+    const t = document.getElementById('go-total');
+    if (t && qty && price && !t.value) t.value = qty * price;
+  },
+  _fillGeneralFromHistory(vendor, description) {
+    const v = document.getElementById('go-vendor');
+    const d = document.getElementById('go-desc');
+    if (v) v.value = vendor;
+    if (d) d.value = description;
+  },
+  saveGeneralOrder(e, editId) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const admin = Auth.isAdmin();
+    const base = {
+      date: f.get('date'),
+      status: f.get('status') || '주문',
+      vendor: f.get('vendor'),
+      description: f.get('description'),
+      quantity: f.get('quantity') ? +f.get('quantity') : null,
+      unit_price: +f.get('unit_price')||0,
+      total_amount: +f.get('total_amount')||0,
+      note: f.get('note')
+    };
+    const data = DB.getGeneralOrders();
+    if (editId) {
+      const idx = data.findIndex(r => r.id === editId);
+      if (idx>=0) data[idx] = { ...data[idx], ...base };
+    } else {
+      data.push({ id: DB.nextId('gorder'), ...base });
+    }
+    DB.saveGeneralOrders(data);
+    closeModal();
+    Pages.general(App.year, App.month);
+  },
+  deleteGeneralOrder(id) {
+    confirm2('이 주문 기록을 삭제하시겠습니까?', () => {
+      DB.saveGeneralOrders(DB.getGeneralOrders().filter(r => r.id !== id));
+      Pages.general(App.year, App.month);
+    });
+  },
+
+  // ─── LAB WORK ───
+  _labTab: 'list',
+  lab(y, m) {
+    const tab = Pages._labTab;
+    const tabsHtml = [
+      { id: 'list', label: '의뢰 목록' },
+      { id: 'add', label: '의뢰 추가' },
+    ].map(t => `<button class="tab ${tab===t.id?'active':''}" onclick="Pages._labTab='${t.id}';Pages.lab(App.year,App.month)">${t.label}</button>`).join('');
+
+    let body = tab === 'list' ? Pages._labList(y, m) : Pages._labAddForm();
+    document.getElementById('content').innerHTML = `<div class="card"><div class="tabs">${tabsHtml}</div>${body}</div>`;
+    Pages._bindDrag();
+  },
+
+  _labList(y, m) {
+    const admin = Auth.isAdmin();
+    const settings = DB.getSettings();
+    const data = DB.getLabWork().filter(r => inMonth(r.date, y, m));
+    const total = sum(data, r => r.amount);
+    const byLab = {};
+    settings.labs.forEach(l => { byLab[l.name] = data.filter(r => r.lab_name === l.name); });
+    const cols = admin ? 9 : 8;
+    const totalConfirmed = sum(data.filter(r => r.status === '도착확인'), r => r.amount||0);
+
+    const rows = [...data].sort((a,b)=>b.date.localeCompare(a.date)).map(r => {
+      const st = r.status === '도착확인' ? '도착확인' : '의뢰';
+      const rowCls = st === '의뢰' ? 'status-order' : 'status-received';
+      const statusBadge = st === '의뢰'
+        ? `<span class="badge badge-orange">의뢰</span>`
+        : `<span class="badge badge-green">도착확인</span>`;
+      return `<tr class="${rowCls}">
+        <td>${statusBadge}</td>
+        <td>${fmt.dateFull(r.date)}</td>
+        <td>${r.lab_name}</td>
+        <td>${r.patient_name}</td>
+        <td>${r.prosthetic_type}</td>
+        <td>${r.tooth_numbers||''}</td>
+        <td>${r.delivery_date ? fmt.dateFull(r.delivery_date) : '-'}</td>
+        ${admin ? `<td class="text-right amount">${fmt.won(r.amount||0)}</td>` : ''}
+        <td style="white-space:nowrap">
+          ${st === '의뢰'
+            ? `<button class="btn btn-sm" style="background:#22c55e;color:#fff" onclick="Pages.toggleLabStatus(${r.id})">도착확인</button>`
+            : `<button class="btn btn-secondary btn-sm" onclick="Pages.toggleLabStatus(${r.id})">취소</button>`}
+          <button class="btn btn-secondary btn-sm" onclick="Pages.editLabWork(${r.id})">수정</button>
+          <button class="btn btn-danger btn-sm" onclick="Pages.deleteLabWork(${r.id})">삭제</button>
+        </td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="${cols}" class="tbl-empty">이번 달 기공 의뢰 내역이 없습니다</td></tr>`;
+
+    const labTotals = admin ? settings.labs.map(l => {
+      const t = sum(byLab[l.name]||[], r => r.amount);
+      return `<div class="stat-card"><div class="label">${l.name}</div><div class="value" style="font-size:18px">${fmt.won(t)}</div><div class="sub">${(byLab[l.name]||[]).length}건</div></div>`;
+    }).join('') : settings.labs.map(l =>
+      `<div class="stat-card"><div class="label">${l.name}</div><div class="value" style="font-size:18px">${(byLab[l.name]||[]).length}건</div></div>`
+    ).join('');
+
+    const vendorSection = Pages._staffLabManageBlock();
+
+    return `
+      <div style="margin-bottom:16px">
+        <div class="stats-grid">${labTotals}
+          ${admin ? `<div class="stat-card blue"><div class="label">이달 합계</div><div class="value" style="font-size:18px">${fmt.won(total)}</div><div class="sub">도착확인: ${fmt.won(totalConfirmed)}</div></div>` : ''}
+        </div>
+      </div>
+      <div class="card-header" style="padding:0;margin-bottom:12px">
+        <div class="card-title">기공 의뢰 목록</div>
+        <button class="btn btn-primary" onclick="Pages._labTab='add';Pages.lab(App.year,App.month)">+ 의뢰 추가</button>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>상태</th><th>의뢰일</th><th>기공소</th><th>환자명</th><th>보철종류</th><th>치아번호</th><th>납기일</th>${admin?'<th class="text-right">금액</th>':''}<th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      ${vendorSection}`;
+  },
+
+  _labAddForm(edit) {
+    const settings = DB.getSettings();
+    const labOpts = settings.labs.map(l => `<option value="${l.name}" ${edit?.lab_name===l.name?'selected':''}>${l.name}</option>`).join('');
+    const prosOpts = getProstheticTypes().map(p => `<option value="${p}" ${edit?.prosthetic_type===p?'selected':''}>${p}</option>`).join('');
+    const curStatus = edit?.status === '도착확인' ? '도착확인' : '의뢰';
+
+    return `
+      <div class="card-title" style="margin-bottom:20px">${edit?'기공 의뢰 수정':'기공 의뢰 추가'}</div>
+      <form onsubmit="Pages.saveLabWork(event,${edit?.id||'null'})">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>상태</label>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:7px 14px;border-radius:6px;border:2px solid #f97316;background:#fff7ed;font-weight:600;font-size:13px">
+                <input type="radio" name="status" value="의뢰" ${curStatus==='의뢰'?'checked':''} style="accent-color:#f97316"> 의뢰
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:7px 14px;border-radius:6px;border:2px solid #22c55e;background:#f0fdf4;font-weight:600;font-size:13px">
+                <input type="radio" name="status" value="도착확인" ${curStatus==='도착확인'?'checked':''} style="accent-color:#22c55e"> 도착확인
+              </label>
+            </div>
+          </div>
+          <div class="form-group"><label>의뢰일</label><input type="date" name="date" value="${edit?.date||today()}" required></div>
+          <div class="form-group"><label>기공소</label><select name="lab_name" required>${labOpts}</select></div>
+          <div class="form-group"><label>환자명</label><input type="text" name="patient_name" value="${edit?.patient_name||''}" required placeholder="환자명"></div>
+          <div class="form-group"><label>보철 종류</label><select name="prosthetic_type">${prosOpts}</select></div>
+          <div class="form-group"><label>치아 번호</label><input type="text" name="tooth_numbers" value="${edit?.tooth_numbers||''}" placeholder="예: #16, #26"></div>
+          <div class="form-group"><label>납기 예정일 (환자 예약 하루 전날)</label><input type="date" name="delivery_date" value="${edit?.delivery_date||''}" required></div>
+          ${Auth.isAdmin() ? `<div class="form-group"><label>금액 (원)</label><input type="number" name="amount" value="${edit?.amount||''}" min="0" step="100" placeholder="0"></div>` : ''}
+          <div class="form-group" style="grid-column:1/-1"><label>메모</label><textarea name="note" placeholder="추가 사항">${edit?.note||''}</textarea></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="Pages._labTab='list';Pages.lab(App.year,App.month)">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>`;
+  },
+  toggleLabStatus(id) {
+    const data = DB.getLabWork();
+    const rec = data.find(r => r.id === id);
+    if (!rec) return;
+    rec.status = (rec.status === '도착확인') ? '의뢰' : '도착확인';
+    DB.saveLabWork(data);
+    Pages.lab(App.year, App.month);
+  },
+  saveLabWork(e, editId) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const data = DB.getLabWork();
+    const getAmt = (existing) => Auth.isAdmin() ? (+f.get('amount') || 0) : (existing || 0);
+    const base = { date: f.get('date'), lab_name: f.get('lab_name'), patient_name: f.get('patient_name'), prosthetic_type: f.get('prosthetic_type'), tooth_numbers: f.get('tooth_numbers'), delivery_date: f.get('delivery_date'), status: f.get('status') || '의뢰', note: f.get('note') };
+    if (editId) {
+      const idx = data.findIndex(r => r.id === editId);
+      if (idx >= 0) data[idx] = { ...data[idx], ...base, amount: getAmt(data[idx].amount) };
+    } else {
+      data.push({ id: DB.nextId('lab'), ...base, amount: getAmt(0) });
+    }
+    DB.saveLabWork(data);
+    Pages._labTab = 'list';
+    Pages.lab(App.year, App.month);
+  },
+  editLabWork(id) {
+    const rec = DB.getLabWork().find(r => r.id === id);
+    if (!rec) return;
+    document.getElementById('content').querySelector('.card').innerHTML =
+      `<div class="tabs"><button class="tab" onclick="Pages._labTab='list';Pages.lab(App.year,App.month)">의뢰 목록</button><button class="tab active">의뢰 수정</button></div>` +
+      Pages._labAddForm(rec);
+  },
+  deleteLabWork(id) {
+    confirm2('이 기공 의뢰를 삭제하시겠습니까?', () => {
+      DB.saveLabWork(DB.getLabWork().filter(r => r.id !== id));
+      Pages.lab(App.year, App.month);
+    });
+  },
+
+  // ─── MONTHLY REPORT ───
+  report(y, m) {
+    const direct = DB.getDirectExpenses().filter(r => inMonth(r.date, y, m));
+    const implantOrders = DB.getImplantOrders().filter(r => inMonth(r.date, y, m));
+    const fixtureUsage = DB.getFixtureUsage().filter(r => inMonth(r.date, y, m));
+    const matUsage = DB.getMatUsage().filter(r => inMonth(r.date, y, m));
+    const generalOrders = DB.getGeneralOrders().filter(r => inMonth(r.date, y, m));
+    const labWork = DB.getLabWork().filter(r => inMonth(r.date, y, m));
+    const fixtures = DB.getFixtures();
+    const mats = DB.getImplantMaterials();
+    const settings = DB.getSettings();
+
+    // Direct by category
+    const directByCat = {};
+    direct.forEach(r => { directByCat[r.category] = (directByCat[r.category]||0) + r.amount; });
+
+    // Implant orders breakdown
+    const implantByType = {};
+    implantOrders.forEach(r => {
+      const cat = r.item_type === 'fixture' ? '픽스쳐' : (() => {
+        const mat = mats.find(x => x.id === r.item_id);
+        return mat ? mat.category : '기타';
+      })();
+      implantByType[cat] = (implantByType[cat]||0) + r.total;
+    });
+
+    // Lab by lab
+    const labByLab = {};
+    labWork.forEach(r => { labByLab[r.lab_name] = (labByLab[r.lab_name]||0) + r.amount; });
+
+    const totalDirect = sum(direct, r => r.amount);
+    const totalImplant = sum(implantOrders, r => r.total);
+    const totalGeneral = sum(generalOrders, r => r.amount);
+    const totalLab = sum(labWork, r => r.amount);
+    const grandTotal = totalDirect + totalImplant + totalGeneral + totalLab;
+
+    const directRows = Object.entries(directByCat).map(([k,v]) => `
+      <div class="report-row"><span>${k}</span><strong>${fmt.won(v)}</strong></div>`).join('') ||
+      `<div class="report-row" style="color:var(--gray-400)"><span>내역 없음</span><strong>-</strong></div>`;
+
+    const implantRows = Object.entries(implantByType).map(([k,v]) => `
+      <div class="report-row"><span>${k}</span><strong>${fmt.won(v)}</strong></div>`).join('') ||
+      `<div class="report-row" style="color:var(--gray-400)"><span>내역 없음</span><strong>-</strong></div>`;
+
+    const labRows = Object.entries(labByLab).map(([k,v]) => `
+      <div class="report-row"><span>${k}</span><strong>${fmt.won(v)}</strong></div>`).join('') ||
+      `<div class="report-row" style="color:var(--gray-400)"><span>내역 없음</span><strong>-</strong></div>`;
+
+    const generalRows = generalOrders.length
+      ? generalOrders.slice(0,5).map(r => `<div class="report-row"><span>${r.vendor} · ${r.description}</span><strong>${fmt.won(r.amount)}</strong></div>`).join('') +
+        (generalOrders.length > 5 ? `<div class="report-row" style="color:var(--gray-400)"><span>... 외 ${generalOrders.length-5}건</span><strong></strong></div>` : '')
+      : `<div class="report-row" style="color:var(--gray-400)"><span>내역 없음</span><strong>-</strong></div>`;
+
+    document.getElementById('content').innerHTML = `
+      <div class="card" style="max-width:700px">
+        <div class="card-header">
+          <div class="card-title">📋 ${fmt.ym(y,m)} 지출 리포트</div>
+          <button class="btn btn-ghost btn-sm" onclick="Pages._printReport()">🖨️ 인쇄</button>
+        </div>
+
+        <div class="report-section">
+          <div style="font-weight:700;margin-bottom:8px;color:var(--primary)">💳 직접 지출</div>
+          ${directRows}
+          <div class="report-row report-total"><span>소계</span><strong>${fmt.won(totalDirect)}</strong></div>
+        </div>
+
+        <div class="report-section">
+          <div style="font-weight:700;margin-bottom:8px;color:#7c3aed">🔩 임플란트 재료 (입고 기준)</div>
+          ${implantRows}
+          <div class="report-row report-total"><span>소계</span><strong>${fmt.won(totalImplant)}</strong></div>
+        </div>
+
+        <div class="report-section">
+          <div style="font-weight:700;margin-bottom:8px;color:#0891b2">📦 일반 치과 재료</div>
+          ${generalRows}
+          <div class="report-row report-total"><span>소계</span><strong>${fmt.won(totalGeneral)}</strong></div>
+        </div>
+
+        <div class="report-section">
+          <div style="font-weight:700;margin-bottom:8px;color:var(--yellow)">🏭 기공 의뢰</div>
+          ${labRows}
+          <div class="report-row report-total"><span>소계</span><strong>${fmt.won(totalLab)}</strong></div>
+        </div>
+
+        <div style="background:var(--primary);color:#fff;padding:16px 20px;border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:700;font-size:15px">이달 총 지출</span>
+          <span style="font-weight:700;font-size:22px">${fmt.won(grandTotal)}</span>
+        </div>
+      </div>`;
+  },
+  _printReport() { window.print(); },
+
+  // ─── SETTINGS ───
+  // 이동 헬퍼
+  _moveArr(arr, from, to) { const a=[...arr]; a.splice(to,0,a.splice(from,1)[0]); return a; },
+  _saveAndRefresh(s) { DB.saveSettings(s); if (App.page === 'settings') Pages.settings(App.year, App.month); else App.renderCurrentPage(); },
+
+  // 블록 렌더 헬퍼
+  _sBlock(title, addFn, items, emptyMsg) {
+    return `<div class="s-block">
+      <div class="s-block-hd">
+        <span class="title">${title}</span>
+        <button class="btn btn-primary btn-sm" onclick="${addFn}">+ 추가</button>
+      </div>
+      <div class="s-block-bd">
+        ${items || `<div style="color:var(--gray-400);font-size:12px;padding:4px 0">${emptyMsg||'없음'}</div>`}
+      </div>
+    </div>`;
+  },
+
+  settings(y, m) {
+    const s = DB.getSettings();
+    const handle = `<span class="drag-handle" title="드래그해서 순서 변경">⠿</span>`;
+
+    const labRows = s.labs.map((l,i) => `
+      <div class="s-item" draggable="true" data-list="labs" data-idx="${i}">
+        ${handle}
+        <div class="name">${l.name}</div>
+        <div class="sub">${l.contact||''}</div>
+        <button class="btn btn-secondary btn-sm" onclick="Pages.editLabModal(${l.id})">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="Pages.deleteLab(${l.id})">삭제</button>
+      </div>`).join('');
+
+    const catRows = (s.directCategories||[]).map((c,i) => `
+      <div class="s-item" draggable="true" data-list="cats" data-idx="${i}">
+        ${handle}
+        <div class="name">${c}</div>
+        <button class="btn btn-secondary btn-sm" onclick="Pages.editCatModal(${i})">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="Pages.deleteCat(${i})">삭제</button>
+      </div>`).join('');
+
+    const companyRows = (s.fixtureCompanies||[]).map((c,i) => `
+      <div class="s-item" draggable="true" data-list="companies" data-idx="${i}">
+        ${handle}
+        <div class="name">${c}</div>
+        <button class="btn btn-secondary btn-sm" onclick="Pages.editCompanyModal(${i})">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="Pages.deleteCompany(${i})">삭제</button>
+      </div>`).join('');
+
+    const matCatRows = (s.implantMatCategories||[]).map((c,i) => `
+      <div class="s-item" draggable="true" data-list="matCats" data-idx="${i}">
+        ${handle}
+        <div class="name">${c.name}</div>
+        <span class="badge ${c.trackInventory?'badge-blue':'badge-gray'}" style="font-size:11px">${c.trackInventory?'📦 재고':'📋 주문'}</span>
+        <button class="btn btn-secondary btn-sm" onclick="Pages.editImplantCatModal(${i})">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="Pages.deleteImplantCat(${i})">삭제</button>
+      </div>`).join('');
+
+    const prosRows = (s.prostheticTypes||[]).map((p,i) => `
+      <div class="s-item" draggable="true" data-list="prosthetics" data-idx="${i}">
+        ${handle}
+        <div class="name">${p}</div>
+        <button class="btn btn-secondary btn-sm" onclick="Pages.editProstheticModal(${i})">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="Pages.deleteProstheticType(${i})">삭제</button>
+      </div>`).join('');
+
+    // 거래처 블록 (카테고리별)
+    const vendorBlock = (cat, label, desc) => {
+      const allVendors = DB.getVendors();
+      const vendors = allVendors.map((v,gi) => ({...v, _gi: gi})).filter(v => v.category === cat);
+      const rows = vendors.map((v,i) => `
+        <div class="s-item" draggable="true" data-list="vendors_${cat}" data-idx="${i}" data-vid="${v.id}" data-gidx="${v._gi}">
+          ${handle}
+          <div class="name">${v.name}</div>
+          <div class="sub">${v.contact||''}</div>
+          <button class="btn btn-secondary btn-sm" onclick="Pages.editVendorModal(${v.id})">수정</button>
+          <button class="btn btn-danger btn-sm" onclick="Pages.deleteVendor(${v.id})">삭제</button>
+        </div>`).join('') || `<div style="color:var(--gray-400);font-size:12px;padding:4px 0">없음</div>`;
+      return Pages._sBlock(label, `Pages.addVendorModal(null,'${cat}')`, rows, '없음');
+    };
+
+    // 배너 블록 순서 (설정에 저장)
+    const bo = s.blockOrder || {};
+    const implantOrder = bo.implant || ['companies','matCats'];
+    const labOrder     = bo.lab     || ['labs','prosthetics'];
+
+    const implantBlocks = {
+      companies: Pages._sBlock('🔩 픽스쳐 제조사', 'Pages.addCompanyModal()', companyRows, '등록된 제조사 없음'),
+      matCats:   Pages._sBlock('🧪 임플란트 재료 분류', 'Pages.addImplantCatModal()', matCatRows, '등록된 분류 없음'),
+    };
+    const labBlocks = {
+      labs:        Pages._sBlock('🏭 기공소 관리', 'Pages.addLabModal()', labRows, '등록된 기공소 없음'),
+      prosthetics: Pages._sBlock('🦷 보철 종류',   'Pages.addProstheticTypeModal()', prosRows, '등록된 보철 종류 없음'),
+    };
+
+    const blockWrap = (banner, key, html) =>
+      `<div class="s-block-wrap" draggable="true" data-banner="${banner}" data-key="${key}">${html}</div>`;
+
+    document.getElementById('content').innerHTML = `
+      <!-- 거래처 관리 배너 -->
+      <div class="s-banner">
+        <div class="s-banner-hd blue">🏢 거래처 관리</div>
+        <div class="s-banner-bd s-banner-grid">
+          ${vendorBlock('임플란트','임플란트 재료 거래처','임플란트 재료 입고 모달')}
+          ${vendorBlock('일반재료','일반 치과재료 거래처','일반 재료 주문 모달')}
+          ${vendorBlock('기타','기타 거래처','직접 지출 모달')}
+        </div>
+      </div>
+
+      <!-- 임플란트 재료 관련 배너 -->
+      <div class="s-banner">
+        <div class="s-banner-hd green">🔩 임플란트 재료 관련</div>
+        <div class="s-banner-bd s-banner-grid" id="banner-implant">
+          ${implantOrder.map(k => blockWrap('implant', k, implantBlocks[k]||'')).join('')}
+        </div>
+      </div>
+
+      <!-- 기공의뢰 관련 배너 -->
+      <div class="s-banner">
+        <div class="s-banner-hd purple">🏭 기공의뢰 관련</div>
+        <div class="s-banner-bd s-banner-grid" id="banner-lab">
+          ${labOrder.map(k => blockWrap('lab', k, labBlocks[k]||'')).join('')}
+        </div>
+      </div>
+
+      <!-- 직접 지출 분류 배너 -->
+      <div class="s-banner">
+        <div class="s-banner-hd orange">💳 직접 지출 분류</div>
+        <div class="s-banner-bd">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+            <button class="btn btn-primary btn-sm" onclick="Pages.addCatModal()">+ 추가</button>
+          </div>
+          ${catRows || '<div style="color:var(--gray-400);font-size:13px">등록된 분류 없음</div>'}
+        </div>
+      </div>
+
+      <!-- 계정 관리 배너 -->
+      <div class="s-banner">
+        <div class="s-banner-hd dark">🔐 계정 관리</div>
+        <div class="s-banner-bd s-banner-grid">
+          <div class="s-block">
+            <div class="s-block-hd"><span class="title">👨‍⚕️ 원장 비밀번호</span></div>
+            <div class="s-block-bd">
+              <form onsubmit="Pages.savePassword(event,'admin')" style="display:flex;flex-direction:column;gap:8px">
+                <div class="form-group"><label>현재 비밀번호</label><input type="password" name="current" required placeholder="현재 비밀번호"></div>
+                <div class="form-group"><label>새 비밀번호</label><input type="password" name="next" required placeholder="새 비밀번호"></div>
+                <div class="form-group"><label>새 비밀번호 확인</label><input type="password" name="confirm" required placeholder="다시 입력"></div>
+                <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end">변경</button>
+              </form>
+            </div>
+          </div>
+          <div class="s-block">
+            <div class="s-block-hd"><span class="title">👩‍💼 직원 비밀번호</span></div>
+            <div class="s-block-bd">
+              <p style="font-size:12px;color:var(--gray-400);margin-bottom:12px">비워두면 직원은 비밀번호 없이 로그인합니다.</p>
+              <form onsubmit="Pages.savePassword(event,'staff')" style="display:flex;flex-direction:column;gap:8px">
+                <div class="form-group"><label>새 직원 비밀번호</label><input type="password" name="next" placeholder="비워두면 비밀번호 없음"></div>
+                <div class="form-group"><label>확인</label><input type="password" name="confirm" placeholder="다시 입력"></div>
+                <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end">변경</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 데이터 관리 배너 -->
+      <div class="s-banner">
+        <div class="s-banner-hd dark">💾 데이터 관리</div>
+        <div class="s-banner-bd" style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="Pages.exportData()">📤 데이터 내보내기 (JSON)</button>
+          <label class="btn btn-ghost" style="cursor:pointer">📥 데이터 가져오기 (JSON)<input type="file" accept=".json" style="display:none" onchange="Pages.importData(event)"></label>
+          <button class="btn btn-danger" onclick="Pages.resetAll()">🗑️ 전체 데이터 초기화</button>
+        </div>
+      </div>`;
+
+    // 드래그 앤 드롭 바인딩
+    Pages._bindDrag();
+  },
+
+  _bindDrag() {
+    // ── 항목 드래그 ──
+    let dragSrc = null;
+    document.querySelectorAll('.s-item[draggable]').forEach(el => {
+      el.addEventListener('dragstart', e => {
+        dragSrc = el;
+        el.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      el.addEventListener('dragend', () => {
+        dragSrc = null;
+        document.querySelectorAll('.s-item').forEach(x => x.classList.remove('dragging','drag-over'));
+      });
+      el.addEventListener('dragover', e => {
+        e.preventDefault();
+        if (dragSrc && dragSrc !== el && dragSrc.dataset.list === el.dataset.list) {
+          document.querySelectorAll('.s-item').forEach(x => x.classList.remove('drag-over'));
+          el.classList.add('drag-over');
+        }
+      });
+      el.addEventListener('drop', e => {
+        e.preventDefault();
+        if (!dragSrc || dragSrc === el || dragSrc.dataset.list !== el.dataset.list) return;
+        const list = dragSrc.dataset.list;
+        const from = parseInt(dragSrc.dataset.idx);
+        const to   = parseInt(el.dataset.idx);
+        const s = DB.getSettings();
+        const listMap = {
+          labs:        () => { s.labs = this._moveArr(s.labs, from, to); DB.saveSettings(s); },
+          cats:        () => { s.directCategories = this._moveArr(s.directCategories, from, to); DB.saveSettings(s); },
+          companies:   () => { s.fixtureCompanies = this._moveArr(s.fixtureCompanies, from, to); DB.saveSettings(s); },
+          matCats:     () => { s.implantMatCategories = this._moveArr(s.implantMatCategories, from, to); DB.saveSettings(s); },
+          prosthetics: () => { s.prostheticTypes = this._moveArr(s.prostheticTypes||[], from, to); DB.saveSettings(s); },
+        };
+        if (listMap[list]) {
+          listMap[list]();
+          if (App.page === 'settings') Pages.settings(App.year, App.month); else App.renderCurrentPage();
+        } else if (list.startsWith('vendors_')) {
+          const fromGIdx = parseInt(dragSrc.dataset.gidx);
+          const toGIdx   = parseInt(el.dataset.gidx);
+          DB.saveVendors(this._moveArr(DB.getVendors(), fromGIdx, toGIdx));
+          if (App.page === 'settings') Pages.settings(App.year, App.month); else App.renderCurrentPage();
+        }
+      });
+    });
+
+    // ── 블록 드래그 (배너 내) ──
+    let dragBlock = null;
+    document.querySelectorAll('.s-block-wrap[draggable]').forEach(el => {
+      el.addEventListener('dragstart', e => {
+        dragBlock = el;
+        el.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.stopPropagation();
+      });
+      el.addEventListener('dragend', () => {
+        dragBlock = null;
+        document.querySelectorAll('.s-block-wrap').forEach(x => x.classList.remove('dragging','drag-over'));
+      });
+      el.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (dragBlock && dragBlock !== el && dragBlock.dataset.banner === el.dataset.banner) {
+          document.querySelectorAll('.s-block-wrap').forEach(x => x.classList.remove('drag-over'));
+          el.classList.add('drag-over');
+        }
+      });
+      el.addEventListener('drop', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!dragBlock || dragBlock === el || dragBlock.dataset.banner !== el.dataset.banner) return;
+        const banner = dragBlock.dataset.banner;
+        const defaults = { implant: ['companies','matCats'], lab: ['labs','prosthetics'] };
+        const s = DB.getSettings();
+        if (!s.blockOrder) s.blockOrder = {};
+        const order = s.blockOrder[banner] || [...defaults[banner]];
+        const from = order.indexOf(dragBlock.dataset.key);
+        const to   = order.indexOf(el.dataset.key);
+        if (from < 0 || to < 0) return;
+        const newOrder = [...order];
+        newOrder.splice(to, 0, newOrder.splice(from, 1)[0]);
+        s.blockOrder[banner] = newOrder;
+        DB.saveSettings(s);
+        Pages.settings(App.year, App.month);
+      });
+    });
+  },
+
+  // 블록 순서 변경
+  moveBlock(banner, i, dir) {
+    const s = DB.getSettings();
+    if (!s.blockOrder) s.blockOrder = {};
+    const defaults = { implant: ['companies','matCats'], lab: ['labs','prosthetics'] };
+    if (!s.blockOrder[banner]) s.blockOrder[banner] = [...defaults[banner]];
+    s.blockOrder[banner] = this._moveArr(s.blockOrder[banner], i, dir);
+    this._saveAndRefresh(s);
+  },
+
+  // ── 기공소 관리 ──
+  addLabModal() {
+    showModal(`<div class="modal" style="max-width:360px">
+      <div class="modal-title">기공소 추가</div>
+      <form onsubmit="Pages.saveLab(event,null)">
+        <div class="form-grid">
+          <div class="form-group" style="grid-column:1/-1"><label>기공소 이름</label><input type="text" name="name" required placeholder="기공소명"></div>
+          <div class="form-group" style="grid-column:1/-1"><label>연락처</label><input type="text" name="contact" placeholder="연락처"></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  editLabModal(id) {
+    const s = DB.getSettings();
+    const l = s.labs.find(x => x.id === id);
+    if (!l) return;
+    showModal(`<div class="modal" style="max-width:360px">
+      <div class="modal-title">기공소 수정</div>
+      <form onsubmit="Pages.saveLab(event,${id})">
+        <div class="form-grid">
+          <div class="form-group" style="grid-column:1/-1"><label>기공소 이름</label><input type="text" name="name" value="${l.name}" required></div>
+          <div class="form-group" style="grid-column:1/-1"><label>연락처</label><input type="text" name="contact" value="${l.contact||''}" placeholder="연락처"></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  saveLab(e, editId) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const s = DB.getSettings();
+    if (editId) {
+      const lab = s.labs.find(l => l.id === editId);
+      if (lab) { lab.name = f.get('name'); lab.contact = f.get('contact'); }
+    } else {
+      const maxId = Math.max(0, ...s.labs.map(l => l.id));
+      s.labs.push({ id: maxId + 1, name: f.get('name'), contact: f.get('contact') });
+    }
+    closeModal(); this._saveAndRefresh(s);
+  },
+  moveLab(i, dir) {
+    const s = DB.getSettings(); s.labs = this._moveArr(s.labs, i, dir); this._saveAndRefresh(s);
+  },
+  deleteLab(id) {
+    confirm2('이 기공소를 삭제하시겠습니까?', () => {
+      const s = DB.getSettings(); s.labs = s.labs.filter(l => l.id !== id); this._saveAndRefresh(s);
+    });
+  },
+
+  // ── 직접 지출 분류 ──
+  addCatModal() {
+    showModal(`<div class="modal" style="max-width:360px">
+      <div class="modal-title">직접 지출 분류 추가</div>
+      <form onsubmit="Pages.saveCat(event,null)">
+        <div class="form-group"><label>분류명</label><input type="text" name="name" required placeholder="예: 소모품비"></div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  editCatModal(i) {
+    const s = DB.getSettings();
+    const cur = s.directCategories[i] || '';
+    showModal(`<div class="modal" style="max-width:360px">
+      <div class="modal-title">직접 지출 분류 수정</div>
+      <form onsubmit="Pages.saveCat(event,${i})">
+        <div class="form-group"><label>분류명</label><input type="text" name="name" value="${cur}" required></div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  saveCat(e, editIdx) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const s = DB.getSettings();
+    if (editIdx !== null && editIdx !== undefined) s.directCategories[editIdx] = f.get('name');
+    else s.directCategories.push(f.get('name'));
+    closeModal(); this._saveAndRefresh(s);
+  },
+  moveCat(i, dir) {
+    const s = DB.getSettings(); s.directCategories = this._moveArr(s.directCategories, i, dir); this._saveAndRefresh(s);
+  },
+  deleteCat(i) {
+    confirm2('이 분류를 삭제하시겠습니까?', () => {
+      const s = DB.getSettings(); s.directCategories.splice(i, 1); this._saveAndRefresh(s);
+    });
+  },
+
+  // ── 픽스쳐 제조사 ──
+  addCompanyModal() {
+    showModal(`<div class="modal" style="max-width:360px">
+      <div class="modal-title">픽스쳐 제조사 추가</div>
+      <form onsubmit="Pages.saveCompany(event,null)">
+        <div class="form-group"><label>제조사명</label><input type="text" name="name" required placeholder="예: 디오, 덴티움"></div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  editCompanyModal(i) {
+    const s = DB.getSettings();
+    showModal(`<div class="modal" style="max-width:360px">
+      <div class="modal-title">제조사 수정</div>
+      <form onsubmit="Pages.saveCompany(event,${i})">
+        <div class="form-group"><label>제조사명</label><input type="text" name="name" value="${s.fixtureCompanies[i]||''}" required></div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  saveCompany(e, editIdx) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const s = DB.getSettings();
+    const name = f.get('name').trim();
+    if (!name) return;
+    if (editIdx !== null && editIdx !== undefined) s.fixtureCompanies[editIdx] = name;
+    else { if (s.fixtureCompanies.includes(name)) { alert('이미 존재합니다.'); return; } s.fixtureCompanies.push(name); }
+    closeModal(); this._saveAndRefresh(s);
+  },
+  moveCompany(i, dir) {
+    const s = DB.getSettings(); s.fixtureCompanies = this._moveArr(s.fixtureCompanies, i, dir); this._saveAndRefresh(s);
+  },
+  deleteCompany(i) {
+    confirm2('이 제조사를 삭제하시겠습니까?<br>해당 제조사의 픽스쳐 품목은 유지됩니다.', () => {
+      const s = DB.getSettings(); s.fixtureCompanies.splice(i, 1); this._saveAndRefresh(s);
+    });
+  },
+
+  // ── 임플란트 재료 분류 ──
+  addImplantCatModal() { Pages.editImplantCatModal(null); },
+  editImplantCatModal(editIdx) {
+    const s = DB.getSettings();
+    const cur = editIdx !== null ? s.implantMatCategories[editIdx] : null;
+    showModal(`<div class="modal" style="max-width:400px">
+      <div class="modal-title">${cur ? '임플란트 재료 분류 수정' : '임플란트 재료 분류 추가'}</div>
+      <form onsubmit="Pages.saveImplantCat(event,${editIdx??'null'})">
+        <div class="form-grid">
+          <div class="form-group" style="grid-column:1/-1"><label>분류명</label><input type="text" name="name" value="${cur?.name||''}" required placeholder="예: 봉합사, PRF 재료"></div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>재고 관리 방식</label>
+            <select name="trackInventory">
+              <option value="true" ${cur?.trackInventory?'selected':''}>📦 재고 관리 (수량 추적)</option>
+              <option value="false" ${cur&&!cur.trackInventory?'selected':''}>📋 주문량만 기록</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  saveImplantCat(e, editIdx) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const s = DB.getSettings();
+    const name = f.get('name').trim();
+    const track = f.get('trackInventory') === 'true';
+    if (!name) return;
+    if (editIdx !== null && editIdx !== undefined) {
+      s.implantMatCategories[editIdx] = { name, trackInventory: track };
+    } else {
+      if (s.implantMatCategories.find(c => c.name === name)) { alert('이미 존재합니다.'); return; }
+      s.implantMatCategories.push({ name, trackInventory: track });
+    }
+    closeModal(); this._saveAndRefresh(s);
+  },
+  moveImplantCat(i, dir) {
+    const s = DB.getSettings(); s.implantMatCategories = this._moveArr(s.implantMatCategories, i, dir); this._saveAndRefresh(s);
+  },
+  deleteImplantCat(i) {
+    confirm2('이 분류를 삭제하시겠습니까?<br>해당 분류의 재료 품목은 유지됩니다.', () => {
+      const s = DB.getSettings(); s.implantMatCategories.splice(i, 1); this._saveAndRefresh(s);
+    });
+  },
+
+  // ── 보철 종류 ──
+  addProstheticTypeModal() { Pages.editProstheticModal(null); },
+  editProstheticModal(editIdx) {
+    const s = DB.getSettings();
+    const cur = editIdx !== null ? (s.prostheticTypes||[])[editIdx] : '';
+    showModal(`<div class="modal" style="max-width:360px">
+      <div class="modal-title">${cur ? '보철 종류 수정' : '보철 종류 추가'}</div>
+      <form onsubmit="Pages.saveProstheticType(event,${editIdx??'null'})">
+        <div class="form-group"><label>보철 종류명</label><input type="text" name="name" value="${cur||''}" required placeholder="예: 올세라믹 크라운"></div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  saveProstheticType(e, editIdx) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const s = DB.getSettings();
+    const name = f.get('name').trim();
+    if (!name) return;
+    if (!s.prostheticTypes) s.prostheticTypes = [];
+    if (editIdx !== null && editIdx !== undefined) s.prostheticTypes[editIdx] = name;
+    else { if (s.prostheticTypes.includes(name)) { alert('이미 존재합니다.'); return; } s.prostheticTypes.push(name); }
+    closeModal(); this._saveAndRefresh(s);
+  },
+  moveProsthetic(i, dir) {
+    const s = DB.getSettings(); s.prostheticTypes = this._moveArr(s.prostheticTypes||[], i, dir); this._saveAndRefresh(s);
+  },
+  deleteProstheticType(i) {
+    confirm2('이 보철 종류를 삭제하시겠습니까?', () => {
+      const s = DB.getSettings(); (s.prostheticTypes||[]).splice(i,1); this._saveAndRefresh(s);
+    });
+  },
+
+  savePassword(e, role) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const s = DB.getSettings();
+    if (!s.credentials) s.credentials = { adminPassword: '1234', staffPassword: '' };
+    if (role === 'admin') {
+      if (f.get('current') !== s.credentials.adminPassword) { alert('현재 비밀번호가 틀렸습니다.'); return; }
+      if (f.get('next') !== f.get('confirm')) { alert('새 비밀번호가 일치하지 않습니다.'); return; }
+      if (!f.get('next')) { alert('비밀번호를 입력해주세요.'); return; }
+      s.credentials.adminPassword = f.get('next');
+    } else {
+      if (f.get('next') !== f.get('confirm')) { alert('비밀번호가 일치하지 않습니다.'); return; }
+      s.credentials.staffPassword = f.get('next');
+    }
+    DB.saveSettings(s);
+    alert(role === 'admin' ? '원장 비밀번호가 변경되었습니다.' : '직원 비밀번호가 변경되었습니다.');
+    e.target.reset();
+  },
+
+  exportData() {
+    // 캐시와 localStorage 모두 합쳐서 내보내기
+    const data = {};
+    Object.keys(localStorage).filter(k => k.startsWith('dc_')).forEach(k => {
+      try { data[k] = JSON.parse(localStorage.getItem(k)); } catch {}
+    });
+    Object.entries(DB._cache).forEach(([k, v]) => { if (k.startsWith('dc_')) data[k] = v; });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `조이치과_백업_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  },
+  importData(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async evt => {
+      try {
+        const data = JSON.parse(evt.target.result);
+        Object.entries(data).forEach(([k,v]) => {
+          DB._cache[k] = v;
+          localStorage.setItem(k, JSON.stringify(v));
+          // 서버에도 업로드
+          if (DB._serverOk && SERVER_URL) {
+            fetch(`${SERVER_URL}/api/data/${k}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(v)
+            }).catch(() => {});
+          }
+        });
+        alert('데이터를 성공적으로 가져왔습니다.');
+        App.renderCurrentPage();
+      } catch { alert('올바른 JSON 파일이 아닙니다.'); }
+    };
+    reader.readAsText(file);
+  },
+  resetAll() {
+    if (!confirm('모든 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
+    // 로컬 초기화
+    Object.keys(localStorage).filter(k => k.startsWith('dc_')).forEach(k => localStorage.removeItem(k));
+    DB._cache = {};
+    // 서버 초기화
+    if (DB._serverOk && SERVER_URL) {
+      fetch(`${SERVER_URL}/api/data`, { method: 'DELETE' }).catch(() => {});
+    }
+    alert('초기화 완료');
+    App.renderCurrentPage();
+  },
+
+  // ── 거래처 관리 ──
+  _vendorCats: ['임플란트', '일반재료', '기공소', '기타'],
+  _renderVendorList() {
+    const vendors = DB.getVendors();
+    if (!vendors.length) return '<div style="color:var(--gray-400);font-size:13px;padding:8px 0">등록된 거래처 없음</div>';
+    const byCat = {};
+    this._vendorCats.forEach(c => { byCat[c] = vendors.filter(v => v.category === c); });
+    return this._vendorCats.map(cat => {
+      if (!byCat[cat].length) return '';
+      const rows = byCat[cat].map(v => `
+        <div class="item-row">
+          <span class="badge badge-gray" style="min-width:60px;text-align:center">${v.category}</span>
+          <span style="flex:1;font-weight:500">${v.name}</span>
+          <span style="color:var(--gray-400);font-size:12px;min-width:100px">${v.contact||''}</span>
+          <button class="btn btn-secondary btn-sm" onclick="Pages.editVendorModal(${v.id})">수정</button>
+          <button class="btn btn-danger btn-sm" onclick="Pages.deleteVendor(${v.id})">삭제</button>
+        </div>`).join('');
+      return `<div style="margin-bottom:8px"><div style="font-size:11px;font-weight:600;color:var(--gray-400);margin-bottom:4px;text-transform:uppercase">${cat}</div>${rows}</div>`;
+    }).join('');
+  },
+  addVendorModal(editId, defaultCat) {
+    const v = editId ? DB.getVendors().find(x => x.id === editId) : null;
+    const activeCat = v?.category || defaultCat || '임플란트';
+    const catOpts = this._vendorCats.map(c => `<option value="${c}" ${activeCat===c?'selected':''}>${c}</option>`).join('');
+    const catDesc = { '임플란트':'임플란트 재료 입고 모달', '일반재료':'일반 재료 주문 모달', '기공소':'기공 의뢰 모달', '기타':'직접 지출 모달' };
+    showModal(`<div class="modal" style="max-width:420px">
+      <div class="modal-title">${v ? '거래처 수정' : '거래처 추가'}</div>
+      <form onsubmit="Pages.saveVendor(event,${editId||'null'})">
+        <div class="form-grid">
+          <div class="form-group" style="grid-column:1/-1">
+            <label>분류 <span style="font-weight:400;color:var(--gray-400);font-size:11px">— 선택한 분류의 모달에서 자동완성으로 표시됩니다</span></label>
+            <select name="category" id="vendor-cat-sel" onchange="document.getElementById('vendor-cat-hint').textContent=({'임플란트':'임플란트 재료 입고 모달','일반재료':'일반 재료 주문 모달','기공소':'기공 의뢰 모달','기타':'직접 지출 모달'})[this.value]||''">
+              ${catOpts}
+            </select>
+            <div id="vendor-cat-hint" style="font-size:11px;color:var(--primary);margin-top:3px">${catDesc[activeCat]||''}</div>
+          </div>
+          <div class="form-group"><label>거래처명</label><input type="text" name="name" value="${v?.name||''}" required placeholder="거래처명"></div>
+          <div class="form-group"><label>연락처</label><input type="text" name="contact" value="${v?.contact||''}" placeholder="전화번호 또는 담당자"></div>
+          <div class="form-group" style="grid-column:1/-1"><label>메모</label><input type="text" name="note" value="${v?.note||''}" placeholder="추가 메모"></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>`);
+  },
+  editVendorModal(id) { this.addVendorModal(id, null); },
+  saveVendor(e, editId) {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const vendors = DB.getVendors();
+    const item = { category: f.get('category'), name: f.get('name'), contact: f.get('contact'), note: f.get('note') };
+    if (editId) {
+      const idx = vendors.findIndex(v => v.id === editId);
+      if (idx >= 0) vendors[idx] = { ...vendors[idx], ...item };
+    } else {
+      const maxId = Math.max(0, ...vendors.map(v => v.id));
+      vendors.push({ id: maxId + 1, ...item });
+    }
+    DB.saveVendors(vendors);
+    closeModal();
+    App.renderCurrentPage();
+  },
+  deleteVendor(id) {
+    confirm2('이 거래처를 삭제하시겠습니까?', () => {
+      DB.saveVendors(DB.getVendors().filter(v => v.id !== id));
+      App.renderCurrentPage();
+    });
+  },
+
+  // 기공의뢰 탭 직원용 — 기공소 관리 + 보철 종류 관리
+  _staffLabManageBlock() {
+    const s = DB.getSettings();
+    const handle = `<span class="drag-handle" title="드래그해서 순서 변경">⠿</span>`;
+
+    const labRows = s.labs.map((l,i) => `
+      <div class="s-item" draggable="true" data-list="labs" data-idx="${i}">
+        ${handle}
+        <div class="name">${l.name}</div>
+        <div class="sub">${l.contact||''}</div>
+        <button class="btn btn-secondary btn-sm" onclick="Pages.editLabModal(${l.id})">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="Pages.deleteLab(${l.id})">삭제</button>
+      </div>`).join('') || `<div style="color:var(--gray-400);font-size:12px;padding:4px 0">없음</div>`;
+
+    const prosRows = (s.prostheticTypes||[]).map((p,i) => `
+      <div class="s-item" draggable="true" data-list="prosthetics" data-idx="${i}">
+        ${handle}
+        <div class="name">${p}</div>
+        <button class="btn btn-secondary btn-sm" onclick="Pages.editProstheticModal(${i})">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="Pages.deleteProstheticType(${i})">삭제</button>
+      </div>`).join('') || `<div style="color:var(--gray-400);font-size:12px;padding:4px 0">없음</div>`;
+
+    return `<div class="card" style="margin-top:16px">
+      <div class="s-banner-grid" style="padding:0">
+        <div>
+          <div class="card-header" style="margin-bottom:10px">
+            <div class="card-title">🏭 기공소 관리</div>
+            <button class="btn btn-primary btn-sm" onclick="Pages.addLabModal()">+ 추가</button>
+          </div>
+          ${labRows}
+        </div>
+        <div>
+          <div class="card-header" style="margin-bottom:10px">
+            <div class="card-title">🦷 보철 종류</div>
+            <button class="btn btn-primary btn-sm" onclick="Pages.addProstheticTypeModal()">+ 추가</button>
+          </div>
+          ${prosRows}
+        </div>
+      </div>
+    </div>`;
+  },
+
+  // 직원 탭 하단에 표시되는 거래처 관리 블록
+  _staffVendorBlock(cat, title) {
+    const handle = `<span class="drag-handle" title="드래그해서 순서 변경">⠿</span>`;
+    const allVendors = DB.getVendors();
+    const vendors = allVendors.map((v,gi) => ({...v, _gi: gi})).filter(v => v.category === cat);
+    const rows = vendors.map((v,i) => `
+      <div class="s-item" draggable="true" data-list="vendors_${cat}" data-idx="${i}" data-vid="${v.id}" data-gidx="${v._gi}">
+        ${handle}
+        <div class="name">${v.name}</div>
+        <div class="sub">${v.contact||''}</div>
+        <button class="btn btn-secondary btn-sm" onclick="Pages.editVendorModal(${v.id})">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="Pages.deleteVendor(${v.id})">삭제</button>
+      </div>`).join('') || `<div style="color:var(--gray-400);font-size:12px;padding:4px 0">등록된 거래처 없음</div>`;
+    return `<div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <div class="card-title">🏢 ${title}</div>
+        <button class="btn btn-primary btn-sm" onclick="Pages.addVendorModal(null,'${cat}')">+ 추가</button>
+      </div>
+      ${rows}
+    </div>`;
+  },
+
+};
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+(async () => {
+  await DB.loadAll(); // 서버에서 데이터 로드 (서버 없으면 localStorage 폴백)
+  Auth.restore();     // 세션 복원 시도 (새로고침 후에도 로그인 유지)
+})();
+</script>
+</body>
+</html>
