@@ -814,12 +814,8 @@ const Pages = {
 
     const totalDirect = sum(direct, r => r.amount);
 
-    // ── 임플란트 재료 주문액 (발주 기준, 반품완료 제외, 페일 반품 차감) ──
-    const failReturnedCost = sum(
-      fixtureUsage.filter(r => r.fail && r.return_status === '반품 완료'),
-      r => { const f = allFixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; }
-    );
-    const totalImplantOrder = sum(implantOrders.filter(r => r.item_status !== '반품완료'), r => r.total) - failReturnedCost;
+    // ── 임플란트 재료 주문액 (발주 기준, 반품완료 품목 제외) ──
+    const totalImplantOrder = sum(implantOrders.filter(r => r.item_status !== '반품완료'), r => r.total);
 
     // ── 임플란트 재료 사용액 (사용 기록 기준, 페일 반품완료 제외) ──
     const fixtureCost = sum(
@@ -2517,12 +2513,8 @@ const Pages = {
     const directByCat = {};
     direct.forEach(r => { directByCat[r.category] = (directByCat[r.category]||0) + r.amount; });
 
-    // ── 임플란트 재료 주문액 (반품완료 제외, 페일 반품완료 차감) ──
-    const failReturnedCost = sum(
-      fixtureUsage.filter(r => r.fail && r.return_status === '반품 완료'),
-      r => { const f = fixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; }
-    );
-    const totalImplantOrder = sum(implantOrders.filter(r => r.item_status !== '반품완료'), r => r.total) - failReturnedCost;
+    // ── 임플란트 재료 주문액 (반품완료 품목 제외) ──
+    const totalImplantOrder = sum(implantOrders.filter(r => r.item_status !== '반품완료'), r => r.total);
 
     // ── 임플란트 재료 사용액 (사용 기록 기준, 페일 반품완료 제외) ──
     const fixtureCost = sum(
