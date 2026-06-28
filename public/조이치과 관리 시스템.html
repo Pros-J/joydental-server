@@ -2221,7 +2221,7 @@ const Pages = {
       const itemLines = g.items.map(r => {
         const ist = getIST(r);
         let itemActs = '';
-        if (isNew && isPublished || !isNew) {
+        {
           if (ist === '') {
             itemActs = `<button class="btn btn-sm" style="background:#22c55e;color:#fff;font-size:10px;padding:2px 7px" onclick="Pages.setGeneralItemStatus(${r.id},'입고확인')">입고확인</button>
               <button class="btn btn-sm" style="background:#dc2626;color:#fff;font-size:10px;padding:2px 7px" onclick="Pages.setGeneralItemStatus(${r.id},'반품 신청')">반품 신청</button>`;
