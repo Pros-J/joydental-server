@@ -2198,6 +2198,7 @@ const Pages = {
       groupMap[gid].items.push(r);
     });
     const groups = Object.values(groupMap).sort((a,b) => b.date.localeCompare(a.date));
+    const onlineVendorNames = new Set(DB.getVendors().filter(v => v.online_order).map(v => v.name));
 
     const orderBadge = st => st === '주문서 발행 완료'
       ? `<span class="badge" style="background:#ede9fe;color:#7c3aed">발행 완료</span>`
@@ -2250,7 +2251,8 @@ const Pages = {
 
       let groupActs = '';
       if (isNew) {
-        if (!isPublished) {
+        const isOnline = onlineVendorNames.has(g.vendor);
+        if (!isPublished && !isOnline) {
           groupActs = `<button class="btn btn-sm" style="background:#7c3aed;color:#fff" onclick="Pages.publishGeneralGroup(${g.gid})">주문서 발행</button>
             <button class="btn btn-secondary btn-sm" onclick="Pages.editGeneralGroupModal(${g.gid})">수정</button>`;
         } else {
@@ -2359,6 +2361,17 @@ const Pages = {
     tbody.appendChild(tr);
   },
 
+  _gCheckOnlineVendor(name) {
+    const isOnline = DB.getVendors().some(v => v.name === name && v.online_order);
+    const sec = document.getElementById('gstatus-section');
+    const badge = document.getElementById('gstatus-online-badge');
+    if (sec) sec.style.display = isOnline ? 'none' : '';
+    if (badge) badge.style.display = isOnline ? '' : 'none';
+    if (isOnline) {
+      document.querySelectorAll('[name="gstatus"]').forEach(r => { r.checked = r.value === '주문서 발행 완료'; });
+    }
+  },
+
   addGeneralGroupModal() {
     const admin = Auth.isAdmin();
     Pages._gRowIdx = 0;
@@ -2370,9 +2383,12 @@ const Pages = {
       <form id="ggroup-form" onsubmit="Pages.saveGeneralGroup(event,null)">
         <div class="form-grid">
           <div class="form-group"><label>날짜</label><input type="date" name="gdate" value="${today()}" required></div>
-          <div class="form-group"><label>거래처</label><input type="text" name="gvendor" list="vlist-general" placeholder="거래처명" required></div>
+          <div class="form-group"><label>거래처</label><input type="text" name="gvendor" list="vlist-general" placeholder="거래처명" required oninput="Pages._gCheckOnlineVendor(this.value)"></div>
           <div class="form-group" style="grid-column:1/-1"><label>메모</label><input type="text" name="gmemo" placeholder="납기, 발주번호 등"></div>
-          <div class="form-group" style="grid-column:1/-1">
+          <div id="gstatus-online-badge" style="display:none;grid-column:1/-1;padding:8px 12px;background:#dbeafe;color:#1d4ed8;border-radius:6px;font-size:13px;font-weight:600">
+            온라인 주문 거래처 — 주문 즉시 발행 완료 처리됩니다
+          </div>
+          <div id="gstatus-section" class="form-group" style="grid-column:1/-1">
             <label>주문 상태</label>
             <div style="display:flex;gap:8px;margin-top:4px">
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border-radius:6px;border:2px solid #f97316;background:#fff7ed;font-weight:600;font-size:13px">
@@ -2434,9 +2450,12 @@ const Pages = {
       <form id="ggroup-form" onsubmit="Pages.saveGeneralGroup(event,'${isOld ? 'old_'+items[0].id : gidOrOldId}')">
         <div class="form-grid">
           <div class="form-group"><label>날짜</label><input type="date" name="gdate" value="${groupDate}" required></div>
-          <div class="form-group"><label>거래처</label><input type="text" name="gvendor" list="vlist-general" value="${groupVendor}" required></div>
+          <div class="form-group"><label>거래처</label><input type="text" name="gvendor" list="vlist-general" value="${groupVendor}" required oninput="Pages._gCheckOnlineVendor(this.value)"></div>
           <div class="form-group" style="grid-column:1/-1"><label>메모</label><input type="text" name="gmemo" value="${groupMemo}" placeholder="납기, 발주번호 등"></div>
-          <div class="form-group" style="grid-column:1/-1">
+          <div id="gstatus-online-badge" style="display:${DB.getVendors().some(v=>v.name===groupVendor&&v.online_order)?'':'none'};grid-column:1/-1;padding:8px 12px;background:#dbeafe;color:#1d4ed8;border-radius:6px;font-size:13px;font-weight:600">
+            온라인 주문 거래처 — 주문 즉시 발행 완료 처리됩니다
+          </div>
+          <div id="gstatus-section" class="form-group" style="grid-column:1/-1;display:${DB.getVendors().some(v=>v.name===groupVendor&&v.online_order)?'none':''}">
             <label>주문 상태</label>
             <div style="display:flex;gap:8px;margin-top:4px">
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border-radius:6px;border:2px solid #f97316;background:#fff7ed;font-weight:600;font-size:13px">
@@ -2475,7 +2494,8 @@ const Pages = {
     const date = f.get('gdate');
     const vendor = f.get('gvendor');
     const memo = f.get('gmemo') || '';
-    const status = f.get('gstatus') || '주문서 작성';
+    const isOnlineVendor = DB.getVendors().some(v => v.name === vendor && v.online_order);
+    const status = isOnlineVendor ? '주문서 발행 완료' : (f.get('gstatus') || '주문서 작성');
 
     const tbody = document.getElementById('gorder-items-body');
     const rowIds = [...tbody.querySelectorAll('tr')].map(r => r.id.replace('grow-',''));
