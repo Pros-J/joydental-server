@@ -9,7 +9,7 @@ const path       = require('path');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET  = process.env.JWT_SECRET  || 'change-this-secret-in-production';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'showtime36@naver.com';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'showtimej36@gmail.com';
 
 // ── Resend 메일 발송 ─────────────────────────────────────────
 const resetCodes = new Map();
