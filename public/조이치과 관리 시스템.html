@@ -808,17 +808,31 @@ const Pages = {
     const generalOrders = DB.getGeneralOrders().filter(r => inMonth(r.date, y, m));
     const labWork = DB.getLabWork().filter(r => inMonth(r.date, y, m));
     const allFixtures = DB.getFixtures();
-    // 페일 픽스쳐 중 반품 완료된 항목 — 비용 차감용
-    const failReturned = DB.getFixtureUsage().filter(r => inMonth(r.date, y, m) && r.fail && r.return_status === '반품 완료');
-    const failReturnedCost = sum(failReturned, r => { const f = allFixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; });
+    const allMats = DB.getImplantMaterials();
+    const fixtureUsage = DB.getFixtureUsage().filter(r => inMonth(r.date, y, m));
+    const matUsage = DB.getMatUsage().filter(r => inMonth(r.date, y, m));
 
     const totalDirect = sum(direct, r => r.amount);
-    // 반품완료 주문 항목 제외 + 페일 픽스쳐 반품 완료 차감
-    const totalImplant = sum(implantOrders.filter(r => r.item_status !== '반품완료'), r => r.total) - failReturnedCost;
+
+    // ── 임플란트 재료 주문액 (발주 기준, 반품완료 제외, 페일 반품 차감) ──
+    const failReturnedCost = sum(
+      fixtureUsage.filter(r => r.fail && r.return_status === '반품 완료'),
+      r => { const f = allFixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; }
+    );
+    const totalImplantOrder = sum(implantOrders.filter(r => r.item_status !== '반품완료'), r => r.total) - failReturnedCost;
+
+    // ── 임플란트 재료 사용액 (사용 기록 기준, 페일 반품완료 제외) ──
+    const fixtureCost = sum(
+      fixtureUsage.filter(r => !(r.fail && r.return_status === '반품 완료')),
+      r => { const f = allFixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; }
+    );
+    const matCost = sum(matUsage, r => { const mt = allMats.find(x => x.id === r.mat_id); return (mt?.unit_price||0) * r.quantity; });
+    const totalImplantUsage = fixtureCost + matCost;
+
     // 반품 상태 제외, total_amount 필드 사용 (구형 데이터 amount 호환)
     const totalGeneral = sum(generalOrders.filter(r => r.status !== '반품'), r => r.total_amount||r.amount||0);
     const totalLab = sum(labWork, r => r.amount);
-    const grandTotal = totalDirect + totalImplant + totalGeneral + totalLab;
+    const grandTotal = totalDirect + totalImplantOrder + totalGeneral + totalLab;
 
     // Low stock alerts
     const fixtures = DB.getFixtures().filter(f => f.stock <= (f.min_stock || 2));
@@ -848,11 +862,11 @@ const Pages = {
         </tr>`).join('')
       : `<tr><td colspan="4" class="tbl-empty">이번 달 기록이 없습니다</td></tr>`;
 
-    // Chart bar
-    const maxVal = Math.max(totalDirect, totalImplant, totalGeneral, totalLab, 1);
+    // Chart bar (주문액 기준)
+    const maxVal = Math.max(totalDirect, totalImplantOrder, totalGeneral, totalLab, 1);
     const bars = [
       { label: '직접지출', val: totalDirect, color: '#2563eb' },
-      { label: '임플란트재료', val: totalImplant, color: '#7c3aed' },
+      { label: '임플란트주문', val: totalImplantOrder, color: '#7c3aed' },
       { label: '일반재료', val: totalGeneral, color: '#0891b2' },
       { label: '기공의뢰', val: totalLab, color: '#d97706' },
     ].map(b => `
@@ -869,7 +883,14 @@ const Pages = {
       <div class="stats-grid">
         <div class="stat-card blue"><div class="label">이달 총 지출</div><div class="value">${fmt.won(grandTotal)}</div><div class="sub">${fmt.ym(y,m)}</div></div>
         <div class="stat-card"><div class="label">직접 지출</div><div class="value" style="font-size:18px">${fmt.won(totalDirect)}</div></div>
-        <div class="stat-card"><div class="label">임플란트 재료</div><div class="value" style="font-size:18px">${fmt.won(totalImplant)}</div></div>
+        <div class="stat-card" style="border-left:3px solid #7c3aed">
+          <div class="label">임플란트 재료 주문액</div><div class="value" style="font-size:18px">${fmt.won(totalImplantOrder)}</div>
+          <div class="sub">발주 기준</div>
+        </div>
+        <div class="stat-card" style="border-left:3px solid #a78bfa">
+          <div class="label">임플란트 재료 사용액</div><div class="value" style="font-size:18px">${fmt.won(totalImplantUsage)}</div>
+          <div class="sub">사용 기록 기준</div>
+        </div>
         <div class="stat-card"><div class="label">일반 치과 재료</div><div class="value" style="font-size:18px">${fmt.won(totalGeneral)}</div></div>
         <div class="stat-card yellow"><div class="label">기공 의뢰</div><div class="value" style="font-size:18px">${fmt.won(totalLab)}</div></div>
       </div>
@@ -2496,11 +2517,22 @@ const Pages = {
     const directByCat = {};
     direct.forEach(r => { directByCat[r.category] = (directByCat[r.category]||0) + r.amount; });
 
-    // 페일 픽스쳐 반품 완료 차감
-    const failReturned = DB.getFixtureUsage().filter(r => inMonth(r.date, y, m) && r.fail && r.return_status === '반품 완료');
-    const failReturnedCost = sum(failReturned, r => { const f = fixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; });
+    // ── 임플란트 재료 주문액 (반품완료 제외, 페일 반품완료 차감) ──
+    const failReturnedCost = sum(
+      fixtureUsage.filter(r => r.fail && r.return_status === '반품 완료'),
+      r => { const f = fixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; }
+    );
+    const totalImplantOrder = sum(implantOrders.filter(r => r.item_status !== '반품완료'), r => r.total) - failReturnedCost;
 
-    // Implant orders breakdown (반품완료 제외)
+    // ── 임플란트 재료 사용액 (사용 기록 기준, 페일 반품완료 제외) ──
+    const fixtureCost = sum(
+      fixtureUsage.filter(r => !(r.fail && r.return_status === '반품 완료')),
+      r => { const f = fixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; }
+    );
+    const matCost = sum(matUsage, r => { const mt = mats.find(x => x.id === r.mat_id); return (mt?.unit_price||0) * r.quantity; });
+    const totalImplantUsage = fixtureCost + matCost;
+
+    // Implant orders breakdown by type (반품완료 제외)
     const implantByType = {};
     implantOrders.filter(r => r.item_status !== '반품완료').forEach(r => {
       const cat = r.item_type === 'fixture' ? '픽스쳐' : (() => {
@@ -2515,12 +2547,9 @@ const Pages = {
     labWork.forEach(r => { labByLab[r.lab_name] = (labByLab[r.lab_name]||0) + r.amount; });
 
     const totalDirect = sum(direct, r => r.amount);
-    // 반품완료 제외 + 페일 픽스쳐 반품 완료 차감
-    const totalImplant = sum(implantOrders.filter(r => r.item_status !== '반품완료'), r => r.total) - failReturnedCost;
-    // 반품 상태 제외, total_amount 필드 사용
     const totalGeneral = sum(generalOrders.filter(r => r.status !== '반품'), r => r.total_amount||r.amount||0);
     const totalLab = sum(labWork, r => r.amount);
-    const grandTotal = totalDirect + totalImplant + totalGeneral + totalLab;
+    const grandTotal = totalDirect + totalImplantOrder + totalGeneral + totalLab;
 
     const directRows = Object.entries(directByCat).map(([k,v]) => `
       <div class="report-row"><span>${k}</span><strong>${fmt.won(v)}</strong></div>`).join('') ||
@@ -2554,9 +2583,10 @@ const Pages = {
         </div>
 
         <div class="report-section">
-          <div style="font-weight:700;margin-bottom:8px;color:#7c3aed">🔩 임플란트 재료 (입고 기준)</div>
+          <div style="font-weight:700;margin-bottom:8px;color:#7c3aed">🔩 임플란트 재료 주문액</div>
           ${implantRows}
-          <div class="report-row report-total"><span>소계</span><strong>${fmt.won(totalImplant)}</strong></div>
+          <div class="report-row report-total"><span>소계 (발주 기준)</span><strong>${fmt.won(totalImplantOrder)}</strong></div>
+          <div class="report-row" style="color:var(--gray-500);font-size:12px"><span>↳ 사용 기록 기준</span><strong>${fmt.won(totalImplantUsage)}</strong></div>
         </div>
 
         <div class="report-section">
