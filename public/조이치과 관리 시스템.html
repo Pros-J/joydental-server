@@ -2071,8 +2071,9 @@ const Pages = {
       const { vendor, date } = group[0];
       const vendorInfo = DB.getVendors().find(v => v.name === vendor);
       const phone = vendorInfo?.phone;
+      console.log('[SMS] 거래처:', vendor, '/ 전화:', phone, '/ 벤더정보:', vendorInfo);
       if (phone) {
-        const itemLines = group.map(r => `- ${r.mat_name || r.fixture_name || r.name || r.description || ''} ${r.quantity}개`).join('\n');
+        const itemLines = group.map(r => `- ${r.item_name || r.description || ''} ${r.quantity}개`).join('\n');
         const total = group.reduce((s, r) => s + (r.total || 0), 0);
         const text = `[조이치과] 주문서 발행\n거래처: ${vendor}\n날짜: ${date}\n\n${itemLines}${total ? '\n\n합계: ' + total.toLocaleString() + '원' : ''}`;
         fetch(`${SERVER_URL}/api/sms`, {
@@ -2080,8 +2081,11 @@ const Pages = {
           headers: { ...DB._authHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ to: phone, text })
         }).then(r => r.json()).then(r => {
-          if (!r.ok) console.warn('SMS 발송 실패:', r.error);
-        }).catch(err => console.warn('SMS 오류:', err));
+          if (r.ok) console.log('[SMS] 발송 성공');
+          else console.warn('[SMS] 발송 실패:', r.error);
+        }).catch(err => console.warn('[SMS] 오류:', err));
+      } else {
+        console.warn('[SMS] 거래처 연락처 없음 — 발송 건너뜀');
       }
     }
 
