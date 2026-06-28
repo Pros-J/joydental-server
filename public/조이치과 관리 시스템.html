@@ -2071,15 +2071,16 @@ const Pages = {
       const { vendor, date } = group[0];
       const vendorInfo = DB.getVendors().find(v => v.name === vendor);
       const phone = vendorInfo?.phone;
-      console.log('[SMS] 거래처:', vendor, '/ 전화:', phone, '/ 그룹 첫 품목:', JSON.stringify(group[0]));
+      console.log('[SMS] 그룹:', JSON.stringify(group), '/ 픽스쳐DB:', JSON.stringify(DB.getFixtures().slice(0,2)));
       if (phone) {
         const itemLines = group.map(r => {
           let name = '';
           if (r.item_type === 'fixture') {
-            const fx = DB.getFixtures().find(x => x.id === r.item_id);
+            const fx = DB.getFixtures().find(x => x.id == r.item_id);
+            console.log('[SMS] fixture lookup id:', r.item_id, '→', fx?.company);
             if (fx) name = `${fx.company} 픽스쳐 ${fx.fixture_type||''} ${fx.diameter}x${fx.length}mm`.replace(/\s+/g,' ').trim();
           } else if (r.item_type === 'mat') {
-            const mt = DB.getImplantMaterials().find(x => x.id === r.item_id);
+            const mt = DB.getImplantMaterials().find(x => x.id == r.item_id);
             if (mt) name = `${mt.category} ${mt.name}`;
           }
           if (!name) name = (r.item_name || r.description || '품목').replace(/[\[\]]/g, '');
