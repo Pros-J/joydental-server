@@ -113,6 +113,24 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// ── 로그인 실패 횟수 추적 ────────────────────────────────────
+const loginAttempts = new Map(); // role → { count, lockedUntil }
+const MAX_ATTEMPTS = 5;
+const LOCK_MINUTES = 30;
+
+function getAttempts(role) {
+  return loginAttempts.get(role) || { count: 0, lockedUntil: null };
+}
+function recordFailure(role) {
+  const a = getAttempts(role);
+  a.count += 1;
+  if (a.count >= MAX_ATTEMPTS) a.lockedUntil = Date.now() + LOCK_MINUTES * 60 * 1000;
+  loginAttempts.set(role, a);
+}
+function resetAttempts(role) {
+  loginAttempts.delete(role);
+}
+
 // ── 로그인 API ───────────────────────────────────────────────
 app.post('/api/login', async (req, res) => {
   const { role, password } = req.body;
@@ -120,7 +138,22 @@ app.post('/api/login', async (req, res) => {
     return res.status(400).json({ ok: false, error: '역할을 선택하세요.' });
   }
 
-  // 비밀번호는 DB settings에서 읽기 (없으면 환경변수 폴백)
+  // 잠금 확인
+  const attempts = getAttempts(role);
+  if (attempts.lockedUntil) {
+    if (Date.now() < attempts.lockedUntil) {
+      const remaining = Math.ceil((attempts.lockedUntil - Date.now()) / 60000);
+      return res.status(423).json({
+        ok: false,
+        error: `비밀번호 5회 오류로 ${remaining}분간 잠금됐습니다. "비밀번호를 잊으셨나요?"를 이용하세요.`,
+        locked: true
+      });
+    } else {
+      resetAttempts(role); // 잠금 시간 지나면 자동 해제
+    }
+  }
+
+  // 비밀번호는 DB settings에서 읽기
   let adminPw = process.env.ADMIN_PASSWORD || '1234';
   let staffPw = process.env.STAFF_PASSWORD || '';
 
@@ -135,12 +168,29 @@ app.post('/api/login', async (req, res) => {
     } catch {}
   }
 
-  if (role === 'admin') {
-    if (password !== adminPw) return res.status(401).json({ ok: false, error: '비밀번호가 틀렸습니다.' });
-  } else {
-    if (staffPw && password !== staffPw) return res.status(401).json({ ok: false, error: '비밀번호가 틀렸습니다.' });
+  // 비밀번호 확인
+  let pwOk = false;
+  if (role === 'admin') pwOk = (password === adminPw);
+  else pwOk = (!staffPw || password === staffPw);
+
+  if (!pwOk) {
+    recordFailure(role);
+    const a = getAttempts(role);
+    const remaining = MAX_ATTEMPTS - a.count;
+    if (a.lockedUntil) {
+      return res.status(423).json({
+        ok: false,
+        error: `비밀번호 5회 오류로 ${LOCK_MINUTES}분간 잠금됐습니다. "비밀번호를 잊으셨나요?"를 이용하세요.`,
+        locked: true
+      });
+    }
+    return res.status(401).json({
+      ok: false,
+      error: `비밀번호가 틀렸습니다. (${remaining}회 남음)`
+    });
   }
 
+  resetAttempts(role);
   const token = jwt.sign({ role }, JWT_SECRET, { expiresIn: '12h' });
   res.json({ ok: true, token, role });
 });
@@ -257,6 +307,7 @@ app.post('/api/reset-password', async (req, res) => {
   }
 
   resetCodes.delete(ADMIN_EMAIL);
+  resetAttempts(role); // 비밀번호 재설정 시 잠금 해제
   res.json({ ok: true, message: '비밀번호가 변경됐습니다.' });
 });
 
