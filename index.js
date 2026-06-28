@@ -5,7 +5,8 @@ const jwt        = require('jsonwebtoken');
 const https = require('https');
 const { Pool }   = require('pg');
 const path       = require('path');
-const coolsms    = require('coolsms-node-sdk').default;
+const _csdk      = require('coolsms-node-sdk');
+const coolsms    = _csdk.default || _csdk;
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
