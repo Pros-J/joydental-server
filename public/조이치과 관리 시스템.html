@@ -223,8 +223,8 @@
     background: #fff; border-radius: 14px; padding: 40px 36px; width: 100%; max-width: 380px;
     box-shadow: 0 20px 60px rgba(0,0,0,.4);
   }
-  .login-logo { font-size: 28px; font-weight: 800; color: #1e3a5f; margin-bottom: 4px; white-space: nowrap; }
-  .login-sub  { font-size: 13px; color: var(--gray-400); margin-bottom: 32px; }
+  .login-logo { font-size: 28px; font-weight: 800; color: #1e3a5f; margin-bottom: 4px; white-space: nowrap; justify-content: center; }
+  .login-sub  { font-size: 13px; color: var(--gray-400); margin-bottom: 32px; text-align: center; }
   .login-role-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
   .login-role-btn {
     flex: 1; padding: 10px; border-radius: 8px; border: 2px solid var(--gray-200);
@@ -239,6 +239,79 @@
   .role-badge { font-size: 11px; padding: 3px 10px; border-radius: 99px; font-weight: 600; }
   .role-badge.admin { background: #fef3c7; color: #92400e; }
   .role-badge.staff { background: #dcfce7; color: #15803d; }
+
+  /* ── HAMBURGER ── */
+  #sidebar-toggle { display: none; background: none; border: none; cursor: pointer; padding: 6px; border-radius: 6px; color: var(--gray-800); }
+  #sidebar-toggle:hover { background: var(--gray-100); }
+  #sidebar-toggle svg { display: block; }
+  #sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 99; }
+
+  /* ── MOBILE ── */
+  @media (max-width: 768px) {
+    /* 사이드바: 슬라이드 드로어 */
+    #sidebar {
+      transform: translateX(-100%);
+      transition: transform .25s ease;
+      z-index: 200;
+    }
+    #sidebar.mobile-open { transform: translateX(0); }
+    #sidebar-overlay.mobile-open { display: block; }
+    #sidebar-toggle { display: flex; align-items: center; justify-content: center; }
+
+    /* 메인: 전체 너비 */
+    #main { margin-left: 0; }
+
+    /* 탑바 */
+    #topbar { padding: 10px 14px; gap: 8px; }
+    #topbar h1 { font-size: 15px; }
+    #topbar .month-nav button { padding: 4px 8px; font-size: 12px; }
+    #topbar .month-nav span { min-width: 64px; font-size: 12px; }
+    .role-badge { display: none; }
+
+    /* 콘텐츠 */
+    #content { padding: 12px; }
+
+    /* 스탯 카드: 2열 */
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .stat-card .value { font-size: 17px; }
+
+    /* 2열 레이아웃 → 1열 */
+    .two-col { grid-template-columns: 1fr; }
+
+    /* 모달: 하단 시트 스타일 */
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal {
+      border-radius: 14px 14px 0 0;
+      max-height: 92vh;
+      max-width: 100%;
+      padding: 20px 16px;
+    }
+
+    /* 폼 그리드: 1열 */
+    .form-grid { grid-template-columns: 1fr !important; }
+
+    /* 탭: 스크롤 가능 */
+    .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+    .tab { white-space: nowrap; padding: 8px 12px; font-size: 12.5px; }
+
+    /* 필터바 */
+    .filter-bar { gap: 6px; }
+    .filter-bar select, .filter-bar input { font-size: 12px; padding: 6px 8px; }
+
+    /* 로그인 박스 */
+    .login-box { border-radius: 14px; padding: 32px 24px; }
+    .login-logo { font-size: 22px; }
+
+    /* 카드 */
+    .card { padding: 14px; }
+
+    /* 테이블 버튼 크기 */
+    .btn-sm { padding: 4px 8px; font-size: 11px; }
+
+    /* 설정 그리드 */
+    .settings-grid { grid-template-columns: 1fr; }
+    .s-banner-grid { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -264,6 +337,9 @@
   </div>
 </div>
 
+<!-- SIDEBAR OVERLAY (모바일) -->
+<div id="sidebar-overlay" onclick="App.closeSidebar()"></div>
+
 <!-- SIDEBAR -->
 <div id="sidebar" class="hidden">
   <div class="logo" id="sidebar-logo" style="display:flex;align-items:center;gap:10px"><img src="joydentallogo.png" style="height:36px;object-fit:contain;flex-shrink:0"><span>조이치과 관리 시스템<span id="sidebar-sub" style="display:block">로딩 중...</span></span></div>
@@ -274,7 +350,12 @@
 <!-- MAIN -->
 <div id="main" class="hidden">
   <div id="topbar">
-    <h1 id="page-title">대시보드</h1>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button id="sidebar-toggle" onclick="App.toggleSidebar()" aria-label="메뉴">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <h1 id="page-title">대시보드</h1>
+    </div>
     <div style="display:flex;align-items:center;gap:12px">
       <div class="month-nav">
         <button onclick="App.prevMonth()">◀</button>
@@ -285,6 +366,7 @@
       <button class="btn btn-ghost btn-sm" onclick="Auth.logout()">로그아웃</button>
     </div>
   </div>
+
   <div id="content"></div>
 </div>
 
@@ -751,6 +833,15 @@ const App = {
     }).join('');
   },
 
+  toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('mobile-open');
+    document.getElementById('sidebar-overlay').classList.toggle('mobile-open');
+  },
+  closeSidebar() {
+    document.getElementById('sidebar').classList.remove('mobile-open');
+    document.getElementById('sidebar-overlay').classList.remove('mobile-open');
+  },
+
   prevMonth() {
     if (this.month === 1) { this.month = 12; this.year--; }
     else this.month--;
@@ -764,6 +855,7 @@ const App = {
 
   navigate(page) {
     this.page = page;
+    this.closeSidebar();
     document.querySelectorAll('.nav-link').forEach(a => a.classList.toggle('active', a.dataset.page === page));
     const titles = {
       dashboard: '대시보드', direct: '직접 지출',
@@ -954,7 +1046,7 @@ const Pages = {
           <div class="form-group"><label>거래처</label><input type="text" name="vendor" value="${edit?.vendor||''}" list="vlist-direct" placeholder="거래처명 입력 또는 선택"></div>
           <div class="form-group"><label>결제 방법</label><select name="payment">${methods}</select></div>
           <div class="form-group" style="grid-column:1/-1"><label>내용/메모</label><input type="text" name="description" value="${edit?.description||''}" placeholder="지출 내용"></div>
-          <div class="form-group"><label>금액 (원)</label><input type="number" name="amount" value="${edit?.amount||''}" min="0" step="100" required placeholder="0"></div>
+          <div class="form-group"><label>금액 (원)</label><input type="number" name="amount" value="${edit?.amount||''}" min="0" step="any" required placeholder="0" inputmode="numeric"></div>
         </div>
         <div class="form-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
