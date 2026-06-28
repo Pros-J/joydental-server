@@ -1276,18 +1276,25 @@ const Pages = {
         <td><span class="badge badge-blue">${r.patient_no||'-'}</span></td>
         <td>${label}</td>
         <td class="text-center">${r.quantity}개</td>
-        ${admin ? `<td class="text-right amount" style="color:var(--red)">${fmt.won((f?.unit_price||0)*r.quantity)}</td>` : ''}
+        ${admin ? (() => {
+          const cost = (f?.unit_price||0)*r.quantity;
+          return rs === '반품 완료'
+            ? `<td class="text-right" style="color:var(--gray-400)"><s style="font-size:11px">${fmt.won(cost)}</s> → <strong>₩0</strong></td>`
+            : `<td class="text-right amount" style="color:var(--red)">${fmt.won(cost)}</td>`;
+        })() : ''}
         <td style="color:var(--gray-400);font-size:12px">${r.memo||''}</td>
         <td style="white-space:nowrap">${actionBtns}</td>
       </tr>`;
     }).join('') : `<tr><td colspan="${cols}" class="tbl-empty">이번 달 반품 기록이 없습니다</td></tr>`;
 
-    const totalLoss = admin ? sum(monthly, r => { const f = fixtures.find(x=>x.id===r.fixture_id); return (f?.unit_price||0)*r.quantity; }) : 0;
+    // 반품 완료된 픽스쳐는 손실에서 제외
+    const totalLoss = admin ? sum(monthly.filter(r => r.return_status !== '반품 완료'), r => { const f = fixtures.find(x=>x.id===r.fixture_id); return (f?.unit_price||0)*r.quantity; }) : 0;
 
     return `
       <div class="card-header" style="padding:0;margin-bottom:16px">
         <div>
           <div class="card-title">페일 픽스쳐 기록</div>
+          ${admin && monthly.length ? `<div style="font-size:12px;color:var(--gray-400)">이달 실손실액: <strong style="color:var(--red)">${fmt.won(totalLoss)}</strong></div>` : ''}
         </div>
       </div>
       <div class="alert" style="background:#fef2f2;border-color:#fecaca;color:#b91c1c;font-size:13px">⚠️ 사용 기록에서 <strong>페일</strong> 체크된 픽스쳐만 표시됩니다. 재고는 사용 기록 시 이미 차감됩니다.</div>
