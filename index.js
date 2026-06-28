@@ -2,7 +2,7 @@ require('dotenv').config();
 const express    = require('express');
 const cors       = require('cors');
 const jwt        = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
+const https = require('https');
 const { Pool }   = require('pg');
 const path       = require('path');
 
@@ -11,26 +11,14 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET  = process.env.JWT_SECRET  || 'change-this-secret-in-production';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'showtime36@naver.com';
 
-// ── Gmail 발송 ───────────────────────────────────────────────
-const mailer = process.env.GMAIL_USER && process.env.GMAIL_APP_PW
-  ? nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PW },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000
-    })
-  : null;
-
-// 인증코드 임시 저장 (메모리, 30분 유효)
-const resetCodes = new Map(); // email → { code, expiresAt }
+// ── Resend 메일 발송 ─────────────────────────────────────────
+const resetCodes = new Map();
 
 function sendResetEmail(code) {
-  if (!mailer) return Promise.reject(new Error('메일 설정이 없습니다.'));
-  return mailer.sendMail({
-    from: `"조이치과 관리 시스템" <${process.env.GMAIL_USER}>`,
+  if (!process.env.RESEND_API_KEY) return Promise.reject(new Error('메일 설정이 없습니다.'));
+
+  const body = JSON.stringify({
+    from: 'onboarding@resend.dev',
     to: ADMIN_EMAIL,
     subject: '[조이치과] 비밀번호 재설정 인증코드',
     html: `
@@ -43,6 +31,31 @@ function sendResetEmail(code) {
         <p style="color:#6b7280;font-size:13px">이 코드는 30분간 유효합니다.<br>
         본인이 요청하지 않은 경우 무시하세요.</p>
       </div>`
+  });
+
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.resend.com',
+      path: '/emails',
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body)
+      }
+    }, res => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        const json = JSON.parse(data);
+        if (res.statusCode >= 400) reject(new Error(json.message || '발송 실패'));
+        else resolve(json);
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('요청 시간 초과')); });
+    req.write(body);
+    req.end();
   });
 }
 
