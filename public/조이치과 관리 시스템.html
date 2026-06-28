@@ -538,7 +538,7 @@ const Auth = {
     overlay.innerHTML = `
       <div style="background:#fff;border-radius:12px;padding:32px;width:360px;max-width:90vw">
         <h3 style="font-size:16px;font-weight:700;margin-bottom:6px">비밀번호 찾기</h3>
-        <p style="font-size:13px;color:var(--gray-600);margin-bottom:20px">showtimej36@gmail.com으로 인증코드를 발송합니다.</p>
+        <p style="font-size:13px;color:var(--gray-600);margin-bottom:20px">관리자 메일로 인증코드를 발송합니다.</p>
 
         <div id="fp-step1">
           <div style="margin-bottom:12px">
@@ -1165,6 +1165,7 @@ const Pages = {
     const itemBadge = ist => {
       if (ist === '입고확인')  return `<span class="badge badge-green" style="font-size:10px">입고확인</span>`;
       if (ist === '반품 신청') return `<span class="badge" style="background:#fee2e2;color:#dc2626;font-size:10px">반품 신청</span>`;
+      if (ist === '반품완료')  return `<span class="badge badge-gray" style="font-size:10px">반품완료</span>`;
       return `<span style="color:var(--gray-400);font-size:11px">대기</span>`;
     };
 
@@ -1190,9 +1191,12 @@ const Pages = {
               ? ist === '입고확인'
                 ? `${itemBadge(ist)} <button style="font-size:10px;padding:2px 6px" class="btn btn-secondary btn-sm" onclick="Pages.setItemStatus(${r.id},'')">취소</button>`
                 : ist === '반품 신청'
-                  ? `${itemBadge(ist)} <button style="font-size:10px;padding:2px 6px" class="btn btn-secondary btn-sm" onclick="Pages.setItemStatus(${r.id},'')">취소</button>`
-                  : `<button style="font-size:10px;padding:2px 6px;background:#22c55e;color:#fff" class="btn btn-sm" onclick="Pages.setItemStatus(${r.id},'입고확인')">입고확인</button>
-                     <button style="font-size:10px;padding:2px 6px;background:#dc2626;color:#fff" class="btn btn-sm" onclick="Pages.setItemStatus(${r.id},'반품 신청')">반품 신청</button>`
+                  ? `${itemBadge(ist)} <button style="font-size:10px;padding:2px 6px;background:#16a34a;color:#fff" class="btn btn-sm" onclick="Pages.setItemStatus(${r.id},'반품완료')">반품완료</button>
+                     <button style="font-size:10px;padding:2px 6px" class="btn btn-secondary btn-sm" onclick="Pages.setItemStatus(${r.id},'')">취소</button>`
+                  : ist === '반품완료'
+                    ? `${itemBadge(ist)} <button style="font-size:10px;padding:2px 6px" class="btn btn-secondary btn-sm" onclick="Pages.setItemStatus(${r.id},'반품 신청')">되돌리기</button>`
+                    : `<button style="font-size:10px;padding:2px 6px;background:#22c55e;color:#fff" class="btn btn-sm" onclick="Pages.setItemStatus(${r.id},'입고확인')">입고확인</button>
+                       <button style="font-size:10px;padding:2px 6px;background:#dc2626;color:#fff" class="btn btn-sm" onclick="Pages.setItemStatus(${r.id},'반품 신청')">반품 신청</button>`
               : itemBadge(ist);
             return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;border-bottom:1px solid var(--gray-100)">
               <span style="flex:1">${name} <span style="color:var(--gray-500)">× ${r.quantity}</span>${admin ? ` <span style="color:var(--gray-400)">(${fmt.won(r.unit_price||0)})</span>` : ''}</span>
@@ -1248,8 +1252,16 @@ const Pages = {
       const rs = r.return_status || '반품 대기';
       const rsBadge = rs === '반품 완료'
         ? `<span class="badge badge-green">반품 완료</span>`
-        : `<span class="badge badge-orange">반품 대기</span>`;
-      return `<tr class="${rs === '반품 완료' ? 'status-received' : 'status-order'}">
+        : rs === '반품 신청'
+          ? `<span class="badge" style="background:#fee2e2;color:#dc2626">반품 신청</span>`
+          : `<span class="badge badge-orange">반품 대기</span>`;
+      const actionBtns = rs === '반품 완료'
+        ? `<button class="btn btn-sm btn-secondary" onclick="Pages.setReturnStatus(${r.id},'반품 대기')">대기로 변경</button>`
+        : rs === '반품 신청'
+          ? `<button class="btn btn-sm btn-primary" onclick="Pages.setReturnStatus(${r.id},'반품 완료')">반품 완료</button>
+             <button class="btn btn-sm btn-secondary" onclick="Pages.setReturnStatus(${r.id},'반품 대기')">취소</button>`
+          : `<button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="Pages.setReturnStatus(${r.id},'반품 신청')">반품 신청</button>`;
+      return `<tr class="${rs === '반품 완료' ? 'status-received' : rs === '반품 신청' ? 'status-return' : 'status-order'}">
         <td>${rsBadge}</td>
         <td>${fmt.dateFull(r.date)}</td>
         <td>${r.patient_name||'-'}</td>
@@ -1258,7 +1270,7 @@ const Pages = {
         <td class="text-center">${r.quantity}개</td>
         ${admin ? `<td class="text-right amount" style="color:var(--red)">${fmt.won((f?.unit_price||0)*r.quantity)}</td>` : ''}
         <td style="color:var(--gray-400);font-size:12px">${r.memo||''}</td>
-        <td><button class="btn btn-sm ${rs==='반품 완료'?'btn-secondary':'btn-primary'}" onclick="Pages.toggleReturnStatus(${r.id})">${rs==='반품 완료'?'대기로 변경':'반품 완료'}</button></td>
+        <td style="white-space:nowrap">${actionBtns}</td>
       </tr>`;
     }).join('') : `<tr><td colspan="${cols}" class="tbl-empty">이번 달 반품 기록이 없습니다</td></tr>`;
 
@@ -1277,11 +1289,11 @@ const Pages = {
       </table></div>`;
   },
 
-  toggleReturnStatus(id) {
+  setReturnStatus(id, newStatus) {
     const data = DB.getFixtureUsage();
     const rec = data.find(r => r.id === id);
     if (!rec) return;
-    rec.return_status = (rec.return_status === '반품 완료') ? '반품 대기' : '반품 완료';
+    rec.return_status = newStatus;
     DB.saveFixtureUsage(data);
     Pages.implant(App.year, App.month);
   },
@@ -2617,7 +2629,7 @@ const Pages = {
         <div class="s-item" draggable="true" data-list="vendors_${cat}" data-idx="${i}" data-vid="${v.id}" data-gidx="${v._gi}">
           ${handle}
           <div class="name">${v.name}</div>
-          <div class="sub">${v.contact||''}</div>
+          <div class="sub">${[v.manager, v.phone].filter(Boolean).join(' · ')}</div>
           <button class="btn btn-secondary btn-sm" onclick="Pages.editVendorModal(${v.id})">수정</button>
           <button class="btn btn-danger btn-sm" onclick="Pages.deleteVendor(${v.id})">삭제</button>
         </div>`).join('') || `<div style="color:var(--gray-400);font-size:12px;padding:4px 0">없음</div>`;
@@ -3133,7 +3145,7 @@ const Pages = {
         <div class="item-row">
           <span class="badge badge-gray" style="min-width:60px;text-align:center">${v.category}</span>
           <span style="flex:1;font-weight:500">${v.name}</span>
-          <span style="color:var(--gray-400);font-size:12px;min-width:100px">${v.contact||''}</span>
+          <span style="color:var(--gray-400);font-size:12px;min-width:120px">${[v.manager, v.phone].filter(Boolean).join(' · ')}</span>
           <button class="btn btn-secondary btn-sm" onclick="Pages.editVendorModal(${v.id})">수정</button>
           <button class="btn btn-danger btn-sm" onclick="Pages.deleteVendor(${v.id})">삭제</button>
         </div>`).join('');
@@ -3157,7 +3169,11 @@ const Pages = {
             <div id="vendor-cat-hint" style="font-size:11px;color:var(--primary);margin-top:3px">${catDesc[activeCat]||''}</div>
           </div>
           <div class="form-group"><label>거래처명</label><input type="text" name="name" value="${v?.name||''}" required placeholder="거래처명"></div>
-          <div class="form-group"><label>연락처</label><input type="text" name="contact" value="${v?.contact||''}" placeholder="전화번호 또는 담당자"></div>
+          <div class="form-group"><label>담당자명</label><input type="text" name="manager" value="${v?.manager||''}" placeholder="담당자 이름"></div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>연락처 <span style="font-weight:400;color:var(--gray-400);font-size:11px">— 띄어쓰기·특수기호 없이 숫자만 입력 (예: 01012345678)</span></label>
+            <input type="text" name="phone" value="${v?.phone||''}" placeholder="01012345678" inputmode="numeric">
+          </div>
           <div class="form-group" style="grid-column:1/-1"><label>메모</label><input type="text" name="note" value="${v?.note||''}" placeholder="추가 메모"></div>
         </div>
         <div class="form-actions">
@@ -3172,7 +3188,7 @@ const Pages = {
     e.preventDefault();
     const f = new FormData(e.target);
     const vendors = DB.getVendors();
-    const item = { category: f.get('category'), name: f.get('name'), contact: f.get('contact'), note: f.get('note') };
+    const item = { category: f.get('category'), name: f.get('name'), manager: f.get('manager'), phone: f.get('phone'), note: f.get('note') };
     if (editId) {
       const idx = vendors.findIndex(v => v.id === editId);
       if (idx >= 0) vendors[idx] = { ...vendors[idx], ...item };
