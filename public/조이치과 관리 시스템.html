@@ -87,7 +87,7 @@
   .tbl-empty { text-align: center; padding: 40px; color: var(--gray-400); font-size: 13px; }
 
   /* ── BUTTONS ── */
-  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: background .15s; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: background .15s; }
   .btn-primary { background: var(--primary); color: #fff; }
   .btn-primary:hover { background: var(--primary-dark); }
   .btn-secondary { background: var(--gray-100); color: var(--gray-800); }
@@ -775,6 +775,32 @@ function confirm2(msg, cb) {
   </div>`);
 }
 
+let _smsCb = null;
+function smsConfirm(previewText, cb) {
+  _smsCb = cb;
+  const escaped = previewText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  showModal(`<div class="modal" style="max-width:420px">
+    <div class="modal-title">📱 문자 발송 확인</div>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:14px">아래 내용으로 담당자에게 문자가 발송됩니다.<br>발송하시겠습니까?</p>
+    <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px 14px;font-size:13px;white-space:pre-wrap;color:var(--gray-800);margin-bottom:20px;line-height:1.7">${escaped}</div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">돌아가기</button>
+      <button class="btn btn-primary" onclick="closeModal();if(_smsCb){_smsCb();_smsCb=null;}">예, 발송</button>
+    </div>
+  </div>`);
+}
+
+function sendSms(phone, text) {
+  fetch(`${SERVER_URL}/api/sms`, {
+    method: 'POST',
+    headers: { ...DB._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: phone, text })
+  }).then(r => r.json()).then(r => {
+    if (r.ok) console.log('[SMS] 발송 성공');
+    else console.warn('[SMS] 발송 실패:', r.error);
+  }).catch(err => console.warn('[SMS] 오류:', err));
+}
+
 // 설정 기반 동적 헬퍼 (설정 저장 전 기본값 폴백)
 const COMPANIES_DEFAULT = ['오스템', '네오', '스트라우만'];
 function getCompanies() { return DB.getSettings().fixtureCompanies || COMPANIES_DEFAULT; }
@@ -1418,9 +1444,28 @@ const Pages = {
     const data = DB.getFixtureUsage();
     const rec = data.find(r => r.id === id);
     if (!rec) return;
-    rec.return_status = newStatus;
-    DB.saveFixtureUsage(data);
-    Pages.implant(App.year, App.month);
+
+    const doUpdate = () => {
+      const data2 = DB.getFixtureUsage();
+      const rec2 = data2.find(r => r.id === id);
+      if (!rec2) return;
+      rec2.return_status = newStatus;
+      DB.saveFixtureUsage(data2);
+      Pages.implant(App.year, App.month);
+    };
+
+    if (newStatus === '반품 신청') {
+      const fx = DB.getFixtures().find(x => x.id === rec.fixture_id);
+      const vendorInfo = fx?.vendor ? DB.getVendors().find(v => v.name === fx.vendor) : null;
+      const phone = vendorInfo?.phone;
+      if (phone) {
+        const fxName = fx ? `${fx.company} 픽스쳐 ${fx.fixture_type||''} ${fx.diameter}×${fx.length}mm`.replace(/\s+/g,' ').trim() : '픽스쳐';
+        const text = `[조이치과] 반품 신청\n거래처: ${fx.vendor}\n품목: ${fxName} × ${rec.quantity}개\n사유: 픽스쳐 페일`;
+        smsConfirm(text, () => { doUpdate(); sendSms(phone, text); });
+        return;
+      }
+    }
+    doUpdate();
   },
 
   _implantItems() {
@@ -2155,21 +2200,23 @@ const Pages = {
     const orders = DB.getImplantOrders();
     const group = orders.filter(x => (x.order_group_id || x.id) === groupId);
     if (!group.length) return;
-    group.forEach(rec => { rec.status = newStatus; });
-    DB.saveImplantOrders(orders);
 
-    // SMS 발송 (주문서 발행 완료 시)
+    const doUpdate = () => {
+      const orders2 = DB.getImplantOrders();
+      orders2.filter(x => (x.order_group_id || x.id) === groupId).forEach(r => { r.status = newStatus; });
+      DB.saveImplantOrders(orders2);
+      Pages.implant(App.year, App.month);
+    };
+
     if (newStatus === '주문서 발행 완료') {
       const { vendor, date } = group[0];
       const vendorInfo = DB.getVendors().find(v => v.name === vendor);
       const phone = vendorInfo?.phone;
-      console.log('[SMS] 그룹:', JSON.stringify(group), '/ 픽스쳐DB:', JSON.stringify(DB.getFixtures().slice(0,2)));
-      if (phone) {
+      if (phone && !vendorInfo?.online_order) {
         const itemLines = group.map(r => {
           let name = '';
           if (r.item_type === 'fixture') {
             const fx = DB.getFixtures().find(x => x.id == r.item_id);
-            console.log('[SMS] fixture lookup id:', r.item_id, '→', fx?.company);
             if (fx) name = `${fx.company} 픽스쳐 ${fx.fixture_type||''} ${fx.diameter}x${fx.length}mm`.replace(/\s+/g,' ').trim();
           } else if (r.item_type === 'mat') {
             const mt = DB.getImplantMaterials().find(x => x.id == r.item_id);
@@ -2178,22 +2225,12 @@ const Pages = {
           if (!name) name = (r.item_name || r.description || '품목').replace(/[\[\]]/g, '');
           return `- ${name} ${r.quantity}개`;
         }).join('\n');
-        const total = group.reduce((s, r) => s + (r.total || 0), 0);
         const text = `[조이치과] 주문서 발행\n거래처: ${vendor}\n날짜: ${date}\n\n${itemLines}`;
-        fetch(`${SERVER_URL}/api/sms`, {
-          method: 'POST',
-          headers: { ...DB._authHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: phone, text })
-        }).then(r => r.json()).then(r => {
-          if (r.ok) console.log('[SMS] 발송 성공');
-          else console.warn('[SMS] 발송 실패:', r.error);
-        }).catch(err => console.warn('[SMS] 오류:', err));
-      } else {
-        console.warn('[SMS] 거래처 연락처 없음 — 발송 건너뜀');
+        smsConfirm(text, () => { doUpdate(); sendSms(phone, text); });
+        return;
       }
     }
-
-    Pages.implant(App.year, App.month);
+    doUpdate();
   },
   // 품목별 상태 변경 (입고확인 / 반품 신청) — 재고 조정 포함
   setItemStatus(itemId, newItemStatus) {
@@ -2203,20 +2240,44 @@ const Pages = {
     const oldItemStatus = rec.item_status || '';
     if (oldItemStatus === newItemStatus) return;
 
-    const wasIn = oldItemStatus === '입고확인';
-    const nowIn = newItemStatus === '입고확인';
-    if (wasIn !== nowIn) {
-      if (rec.item_type === 'fixture') {
-        const fxs = DB.getFixtures(); const fx = fxs.find(x => x.id === rec.item_id);
-        if (fx) { fx.stock = nowIn ? fx.stock + rec.quantity : Math.max(0, fx.stock - rec.quantity); DB.saveFixtures(fxs); }
-      } else {
-        const ms = DB.getImplantMaterials(); const m = ms.find(x => x.id === rec.item_id);
-        if (m && isTrackInventory(m.category)) { m.stock = nowIn ? m.stock + rec.quantity : Math.max(0, m.stock - rec.quantity); DB.saveImplantMaterials(ms); }
+    const doUpdate = () => {
+      const orders2 = DB.getImplantOrders();
+      const rec2 = orders2.find(x => x.id === itemId);
+      if (!rec2) return;
+      const wasIn = (rec2.item_status || '') === '입고확인';
+      const nowIn = newItemStatus === '입고확인';
+      if (wasIn !== nowIn) {
+        if (rec2.item_type === 'fixture') {
+          const fxs = DB.getFixtures(); const fx = fxs.find(x => x.id === rec2.item_id);
+          if (fx) { fx.stock = nowIn ? fx.stock + rec2.quantity : Math.max(0, fx.stock - rec2.quantity); DB.saveFixtures(fxs); }
+        } else {
+          const ms = DB.getImplantMaterials(); const m = ms.find(x => x.id === rec2.item_id);
+          if (m && isTrackInventory(m.category)) { m.stock = nowIn ? m.stock + rec2.quantity : Math.max(0, m.stock - rec2.quantity); DB.saveImplantMaterials(ms); }
+        }
+      }
+      rec2.item_status = newItemStatus;
+      DB.saveImplantOrders(orders2);
+      Pages.implant(App.year, App.month);
+    };
+
+    if (newItemStatus === '반품 신청') {
+      const vendorInfo = DB.getVendors().find(v => v.name === rec.vendor);
+      const phone = vendorInfo?.phone;
+      if (phone) {
+        let name = rec.item_name || '';
+        if (rec.item_type === 'fixture') {
+          const fx = DB.getFixtures().find(x => x.id == rec.item_id);
+          if (fx) name = `${fx.company} 픽스쳐 ${fx.fixture_type||''} ${fx.diameter}x${fx.length}mm`.replace(/\s+/g,' ').trim();
+        } else if (rec.item_type === 'mat') {
+          const mt = DB.getImplantMaterials().find(x => x.id == rec.item_id);
+          if (mt) name = `${mt.category} ${mt.name}${mt.spec ? ' ' + mt.spec : ''}`;
+        }
+        const text = `[조이치과] 반품 신청\n거래처: ${rec.vendor}\n품목: ${name} × ${rec.quantity}개`;
+        smsConfirm(text, () => { doUpdate(); sendSms(phone, text); });
+        return;
       }
     }
-    rec.item_status = newItemStatus;
-    DB.saveImplantOrders(orders);
-    Pages.implant(App.year, App.month);
+    doUpdate();
   },
   deleteImplantOrder(groupId) {
     const orders = DB.getImplantOrders();
@@ -2441,42 +2502,54 @@ const Pages = {
     const data = DB.getGeneralOrders();
     const rec = data.find(r => r.id === id);
     if (!rec) return;
-    if (rec.order_group_id != null) {
-      rec.item_status = newStatus;
-    } else {
-      // old flat record: map back to legacy status field
-      rec.status = newStatus === '반품완료' ? '반품' : newStatus === '입고확인' ? '입고확인' : '주문';
+
+    const doUpdate = () => {
+      const data2 = DB.getGeneralOrders();
+      const rec2 = data2.find(r => r.id === id);
+      if (!rec2) return;
+      if (rec2.order_group_id != null) {
+        rec2.item_status = newStatus;
+      } else {
+        rec2.status = newStatus === '반품완료' ? '반품' : newStatus === '입고확인' ? '입고확인' : '주문';
+      }
+      DB.saveGeneralOrders(data2);
+      Pages.general(App.year, App.month);
+    };
+
+    if (newStatus === '반품 신청') {
+      const vendorInfo = DB.getVendors().find(v => v.name === rec.vendor);
+      const phone = vendorInfo?.phone;
+      if (phone) {
+        const text = `[조이치과] 반품 신청\n거래처: ${rec.vendor}\n품목: ${rec.description} × ${rec.quantity}개`;
+        smsConfirm(text, () => { doUpdate(); sendSms(phone, text); });
+        return;
+      }
     }
-    DB.saveGeneralOrders(data);
-    Pages.general(App.year, App.month);
+    doUpdate();
   },
 
   publishGeneralGroup(gid) {
     const data = DB.getGeneralOrders();
     const group = data.filter(r => r.order_group_id === gid);
-    group.forEach(r => { r.status = '주문서 발행 완료'; });
-    DB.saveGeneralOrders(data);
+    if (!group.length) return;
 
-    // SMS 발송
-    if (group.length) {
-      const { vendor, date } = group[0];
-      const vendorInfo = DB.getVendors().find(v => v.name === vendor);
-      const phone = vendorInfo?.phone;
-      if (phone) {
-        const itemLines = group.map(r => `- ${r.description} ${r.quantity}개`).join('\n');
-        const total = group.reduce((s, r) => s + (r.total_amount || 0), 0);
-        const text = `[조이치과] 주문서 발행\n거래처: ${vendor}\n날짜: ${date}\n\n${itemLines}`;
-        fetch(`${SERVER_URL}/api/sms`, {
-          method: 'POST',
-          headers: { ...DB._authHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: phone, text })
-        }).then(r => r.json()).then(r => {
-          if (!r.ok) console.warn('SMS 발송 실패:', r.error);
-        }).catch(err => console.warn('SMS 오류:', err));
-      }
+    const doUpdate = () => {
+      const data2 = DB.getGeneralOrders();
+      data2.filter(r => r.order_group_id === gid).forEach(r => { r.status = '주문서 발행 완료'; });
+      DB.saveGeneralOrders(data2);
+      Pages.general(App.year, App.month);
+    };
+
+    const { vendor, date } = group[0];
+    const vendorInfo = DB.getVendors().find(v => v.name === vendor);
+    const phone = vendorInfo?.phone;
+    if (phone && !vendorInfo?.online_order) {
+      const itemLines = group.map(r => `- ${r.description} ${r.quantity}개`).join('\n');
+      const text = `[조이치과] 주문서 발행\n거래처: ${vendor}\n날짜: ${date}\n\n${itemLines}`;
+      smsConfirm(text, () => { doUpdate(); sendSms(phone, text); });
+      return;
     }
-
-    Pages.general(App.year, App.month);
+    doUpdate();
   },
 
   _gItemRowHtml(idx, admin, d) {
