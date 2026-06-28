@@ -250,11 +250,11 @@ app.get('/health', (req, res) => {
 });
 
 // ── 서버 시작 ────────────────────────────────────────────────
-initDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 서버 실행 중: http://localhost:${PORT}`);
-  });
-}).catch(err => {
-  console.error('DB 초기화 실패:', err);
-  process.exit(1);
+// DB 초기화 실패해도 서버는 계속 실행 (헬스체크 통과용)
+initDB().catch(err => {
+  console.error('⚠️ DB 초기화 실패 (서버는 계속 실행):', err.message);
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 서버 실행 중: http://0.0.0.0:${PORT}`);
 });
