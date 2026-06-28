@@ -2086,7 +2086,7 @@ const Pages = {
           return `- ${name} ${r.quantity}개`;
         }).join('\n');
         const total = group.reduce((s, r) => s + (r.total || 0), 0);
-        const text = `[조이치과] 주문서 발행\n거래처: ${vendor}\n날짜: ${date}\n\n${itemLines}${total ? '\n\n합계: ' + total.toLocaleString() + '원' : ''}`;
+        const text = `[조이치과] 주문서 발행\n거래처: ${vendor}\n날짜: ${date}\n\n${itemLines}`;
         fetch(`${SERVER_URL}/api/sms`, {
           method: 'POST',
           headers: { ...DB._authHeaders(), 'Content-Type': 'application/json' },
@@ -2372,7 +2372,7 @@ const Pages = {
       if (phone) {
         const itemLines = group.map(r => `- ${r.description} ${r.quantity}개`).join('\n');
         const total = group.reduce((s, r) => s + (r.total_amount || 0), 0);
-        const text = `[조이치과] 주문서 발행\n거래처: ${vendor}\n날짜: ${date}\n\n${itemLines}${total ? '\n\n합계: ' + total.toLocaleString() + '원' : ''}`;
+        const text = `[조이치과] 주문서 발행\n거래처: ${vendor}\n날짜: ${date}\n\n${itemLines}`;
         fetch(`${SERVER_URL}/api/sms`, {
           method: 'POST',
           headers: { ...DB._authHeaders(), 'Content-Type': 'application/json' },
