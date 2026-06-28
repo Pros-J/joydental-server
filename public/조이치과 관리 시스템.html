@@ -1301,7 +1301,7 @@ const Pages = {
         </tr>`).join('')
       : `<tr><td colspan="${admin?6:5}" class="tbl-empty">등록된 재료 없음</td></tr>`;
 
-    const vendorSection = !admin ? Pages._staffVendorBlock('임플란트', '임플란트 재료 거래처') : '';
+    const vendorSection = Pages._staffVendorBlock('임플란트', '임플란트 재료 거래처');
 
     // 직원에게도 제조사 & 분류 관리 제공
     const s = DB.getSettings();
