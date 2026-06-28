@@ -1,11 +1,13 @@
 require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
+const jwt     = require('jsonwebtoken');
 const { Pool } = require('pg');
 const path    = require('path');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
 
 // ── DB 연결 ──────────────────────────────────────────────────
 const pool = process.env.DATABASE_URL ? new Pool({
@@ -19,14 +21,12 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
-
-// 프론트엔드 정적 파일 제공 (HTML 파일을 /public 에 복사하면 됨)
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── DB 초기화 ────────────────────────────────────────────────
 async function initDB() {
   if (!pool) {
-    console.warn('⚠️ DATABASE_URL 없음 — DB 없이 실행 (데이터 저장 안 됨)');
+    console.warn('⚠️ DATABASE_URL 없음 — DB 없이 실행');
     return;
   }
   const client = await pool.connect();
@@ -44,10 +44,61 @@ async function initDB() {
   }
 }
 
-// ── API 라우트 ───────────────────────────────────────────────
+// ── JWT 인증 미들웨어 ────────────────────────────────────────
+function requireAuth(req, res, next) {
+  const header = req.headers['authorization'] || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ ok: false, error: '로그인이 필요합니다.' });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ ok: false, error: '세션이 만료됐습니다. 다시 로그인하세요.' });
+  }
+}
 
-// 전체 데이터 한 번에 가져오기 (앱 시작 시 1회 호출)
-app.get('/api/data', async (req, res) => {
+// 원장 전용 미들웨어
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') return res.status(403).json({ ok: false, error: '원장 권한이 필요합니다.' });
+  next();
+}
+
+// ── 로그인 API ───────────────────────────────────────────────
+app.post('/api/login', async (req, res) => {
+  const { role, password } = req.body;
+  if (!role || !['admin', 'staff'].includes(role)) {
+    return res.status(400).json({ ok: false, error: '역할을 선택하세요.' });
+  }
+
+  // 비밀번호는 DB settings에서 읽기 (없으면 환경변수 폴백)
+  let adminPw = process.env.ADMIN_PASSWORD || '1234';
+  let staffPw = process.env.STAFF_PASSWORD || '';
+
+  if (pool) {
+    try {
+      const result = await pool.query("SELECT value FROM kv_store WHERE key = 'dc_settings'");
+      if (result.rows.length > 0) {
+        const settings = result.rows[0].value;
+        if (settings?.credentials?.adminPassword) adminPw = settings.credentials.adminPassword;
+        if (settings?.credentials?.staffPassword !== undefined) staffPw = settings.credentials.staffPassword;
+      }
+    } catch {}
+  }
+
+  if (role === 'admin') {
+    if (password !== adminPw) return res.status(401).json({ ok: false, error: '비밀번호가 틀렸습니다.' });
+  } else {
+    if (staffPw && password !== staffPw) return res.status(401).json({ ok: false, error: '비밀번호가 틀렸습니다.' });
+  }
+
+  const token = jwt.sign({ role }, JWT_SECRET, { expiresIn: '12h' });
+  res.json({ ok: true, token, role });
+});
+
+// ── 데이터 API (인증 필요) ───────────────────────────────────
+
+// 전체 데이터 로드
+app.get('/api/data', requireAuth, async (req, res) => {
   if (!pool) return res.json({ ok: true, data: {} });
   try {
     const result = await pool.query('SELECT key, value FROM kv_store');
@@ -55,13 +106,12 @@ app.get('/api/data', async (req, res) => {
     result.rows.forEach(row => { data[row.key] = row.value; });
     res.json({ ok: true, data });
   } catch (err) {
-    console.error('GET /api/data error:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// 단일 키 저장 (DB._set 호출 시)
-app.post('/api/data/:key', async (req, res) => {
+// 단일 키 저장
+app.post('/api/data/:key', requireAuth, async (req, res) => {
   const { key } = req.params;
   const value = req.body;
   if (!key.startsWith('dc_')) return res.status(400).json({ ok: false, error: '허용되지 않는 키입니다.' });
@@ -75,13 +125,12 @@ app.post('/api/data/:key', async (req, res) => {
     `, [key, JSON.stringify(value)]);
     res.json({ ok: true });
   } catch (err) {
-    console.error(`POST /api/data/${key} error:`, err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
 // 단일 키 삭제
-app.delete('/api/data/:key', async (req, res) => {
+app.delete('/api/data/:key', requireAuth, async (req, res) => {
   const { key } = req.params;
   if (!key.startsWith('dc_')) return res.status(400).json({ ok: false, error: '허용되지 않는 키입니다.' });
   if (!pool) return res.json({ ok: true, warn: 'DB 없음' });
@@ -89,24 +138,22 @@ app.delete('/api/data/:key', async (req, res) => {
     await pool.query('DELETE FROM kv_store WHERE key = $1', [key]);
     res.json({ ok: true });
   } catch (err) {
-    console.error(`DELETE /api/data/${key} error:`, err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// 전체 초기화
-app.delete('/api/data', async (req, res) => {
+// 전체 초기화 (원장 전용)
+app.delete('/api/data', requireAuth, requireAdmin, async (req, res) => {
   if (!pool) return res.json({ ok: true, warn: 'DB 없음' });
   try {
     await pool.query("DELETE FROM kv_store WHERE key LIKE 'dc_%'");
     res.json({ ok: true });
   } catch (err) {
-    console.error('DELETE /api/data error:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// 헬스 체크 (Railway 배포 확인용)
+// 헬스 체크
 app.get('/health', (req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });

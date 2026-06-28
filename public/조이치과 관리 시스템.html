@@ -257,7 +257,7 @@
       <input type="password" id="login-pw" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')Auth.doLogin()">
     </div>
     <div class="login-err" id="login-err"></div>
-    <button class="btn btn-primary" style="width:100%;margin-top:16px;padding:11px" onclick="Auth.doLogin()">로그인</button>
+    <button class="btn btn-primary login-submit-btn" style="width:100%;margin-top:16px;padding:11px" onclick="Auth.doLogin()">로그인</button>
     <div class="footer-info">데이터는 이 기기의 브라우저에 저장됩니다</div>
   </div>
 </div>
@@ -301,38 +301,53 @@
 const SERVER_URL = 'https://joydental-server-production.up.railway.app';
 
 const DB = {
-  // 메모리 캐시 (앱 시작 시 서버에서 로드, 없으면 localStorage 사용)
   _cache: {},
   _serverOk: false,
 
-  // 동기 읽기 (캐시에서)
+  // 인증 토큰 헤더 반환
+  _authHeaders() {
+    const token = sessionStorage.getItem('dc_token');
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+  },
+
+  // 동기 읽기 (캐시)
   _get(k) {
     if (k in this._cache) return this._cache[k];
-    // 폴백: localStorage
     try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; }
   },
 
   // 동기 쓰기 (캐시 즉시 반영) + 비동기 서버 저장
   _set(k, v) {
     this._cache[k] = v;
-    localStorage.setItem(k, JSON.stringify(v)); // 로컬 백업
+    localStorage.setItem(k, JSON.stringify(v));
     if (this._serverOk && SERVER_URL) {
       fetch(`${SERVER_URL}/api/data/${k}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this._authHeaders(),
         body: JSON.stringify(v)
       }).catch(err => console.warn('서버 저장 실패 (로컬 백업됨):', err));
     }
   },
 
-  // 앱 시작 시 서버에서 전체 데이터 로드
+  // 로그인 후 서버에서 전체 데이터 로드
   async loadAll() {
     if (!SERVER_URL) {
       console.log('로컬 모드: localStorage 사용 중');
       return;
     }
     try {
-      const res = await fetch(`${SERVER_URL}/api/data`, { signal: AbortSignal.timeout(8000) });
+      const res = await fetch(`${SERVER_URL}/api/data`, {
+        headers: this._authHeaders(),
+        signal: AbortSignal.timeout(8000)
+      });
+      if (res.status === 401) {
+        // 토큰 만료 — 로그아웃 처리
+        Auth.logout();
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const { data } = await res.json();
       this._cache = data || {};
@@ -341,7 +356,6 @@ const DB = {
     } catch (err) {
       console.warn('⚠️ 서버 연결 실패 — localStorage 폴백 모드:', err.message);
       this._serverOk = false;
-      // localStorage 데이터를 캐시로 복사
       Object.keys(localStorage).filter(k => k.startsWith('dc_')).forEach(k => {
         try { this._cache[k] = JSON.parse(localStorage.getItem(k)); } catch {}
       });
@@ -426,63 +440,77 @@ const DB = {
 };
 
 // ═══════════════════════════════════════════════════════════
-// AUTH
-// — 서버 전환 시 login() 내부만 fetch('/api/login')으로 교체
+// AUTH — 서버 기반 JWT 로그인
 // ═══════════════════════════════════════════════════════════
 const Auth = {
   _SK: 'dc_session',
-  _role: null,   // 'admin' | 'staff'
+  _TK: 'dc_token',
+  _role: null,
   _selectedRole: 'admin',
 
   getRole()    { return this._role; },
   isAdmin()    { return this._role === 'admin'; },
   isLoggedIn() { return !!this._role; },
 
-  // 로그인 화면에서 역할 탭 클릭
   selectRole(role, btn) {
     this._selectedRole = role;
     document.querySelectorAll('.login-role-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    // 직원은 비밀번호 없을 수 있으므로 placeholder 변경
-    const pw = document.getElementById('login-pw');
-    const creds = DB.getSettings().credentials || {};
-    if (role === 'staff' && !creds.staffPassword) {
-      pw.placeholder = '(비밀번호 없음 — 그냥 로그인)';
-    } else {
-      pw.placeholder = '비밀번호 입력';
-    }
+    document.getElementById('login-pw').placeholder = '비밀번호 입력';
     document.getElementById('login-err').textContent = '';
-  },
-
-  // 자격증명 확인 — 서버 전환 시 이 함수 body만 교체
-  async _checkCredentials(role, password) {
-    const creds = DB.getSettings().credentials || { adminPassword: '1234', staffPassword: '' };
-    if (role === 'admin') {
-      return password === creds.adminPassword ? { ok: true } : { ok: false, msg: '비밀번호가 틀렸습니다.' };
-    }
-    if (role === 'staff') {
-      if (!creds.staffPassword || password === creds.staffPassword) return { ok: true };
-      return { ok: false, msg: '비밀번호가 틀렸습니다.' };
-    }
-    return { ok: false, msg: '역할을 선택하세요.' };
   },
 
   async doLogin() {
     const role = this._selectedRole;
     const pw   = document.getElementById('login-pw').value;
-    const result = await this._checkCredentials(role, pw);
-    if (!result.ok) {
-      document.getElementById('login-err').textContent = result.msg;
-      return;
+    const btn  = document.querySelector('.login-submit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '로그인 중...'; }
+
+    try {
+      if (SERVER_URL) {
+        // 서버 로그인
+        const res = await fetch(`${SERVER_URL}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role, password: pw }),
+          signal: AbortSignal.timeout(8000)
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          document.getElementById('login-err').textContent = data.error || '로그인 실패';
+          return;
+        }
+        sessionStorage.setItem(this._TK, data.token);
+        this._role = data.role;
+      } else {
+        // 로컬 폴백 (서버 없을 때)
+        const creds = DB.getSettings().credentials || { adminPassword: '1234', staffPassword: '' };
+        if (role === 'admin' && pw !== creds.adminPassword) {
+          document.getElementById('login-err').textContent = '비밀번호가 틀렸습니다.';
+          return;
+        }
+        if (role === 'staff' && creds.staffPassword && pw !== creds.staffPassword) {
+          document.getElementById('login-err').textContent = '비밀번호가 틀렸습니다.';
+          return;
+        }
+        this._role = role;
+      }
+      sessionStorage.setItem(this._SK, this._role);
+      await this._showApp();
+    } catch (err) {
+      document.getElementById('login-err').textContent = '서버 연결 실패. 잠시 후 다시 시도하세요.';
+      console.error('로그인 오류:', err);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '로그인'; }
     }
-    this._role = role;
-    sessionStorage.setItem(this._SK, role);
-    this._showApp();
   },
 
   logout() {
     this._role = null;
     sessionStorage.removeItem(this._SK);
+    sessionStorage.removeItem(this._TK);
+    DB._cache = {};
+    DB._serverOk = false;
     document.getElementById('login-pw').value = '';
     document.getElementById('login-err').textContent = '';
     document.getElementById('login-screen').classList.remove('hidden');
@@ -491,27 +519,27 @@ const Auth = {
   },
 
   // 세션 복원 (페이지 새로고침 시)
-  restore() {
-    const saved = sessionStorage.getItem(this._SK);
-    if (saved === 'admin' || saved === 'staff') {
-      this._role = saved;
-      this._showApp();
+  async restore() {
+    const savedRole  = sessionStorage.getItem(this._SK);
+    const savedToken = sessionStorage.getItem(this._TK);
+    if ((savedRole === 'admin' || savedRole === 'staff') && savedToken) {
+      this._role = savedRole;
+      await this._showApp();
     }
-    // 세션 없으면 로그인 화면 유지
   },
 
-  _showApp() {
+  async _showApp() {
+    // 로그인 후 서버에서 데이터 로드
+    await DB.loadAll();
+
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('sidebar').classList.remove('hidden');
     document.getElementById('main').classList.remove('hidden');
-    // 역할 배지
     const badge = document.getElementById('role-badge');
     badge.textContent = this._role === 'admin' ? '👨‍⚕️ 원장' : '👩‍💼 직원';
     badge.className = 'role-badge ' + this._role;
-    // 사이드바 로고
     document.getElementById('sidebar-sub').textContent =
       this._role === 'admin' ? '지출·재고 통합 관리' : '재료·기공 관리';
-    // 네비게이션 렌더
     App.renderNav();
     App.renderCurrentPage();
   }
@@ -3130,8 +3158,7 @@ const Pages = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 (async () => {
-  await DB.loadAll(); // 서버에서 데이터 로드 (서버 없으면 localStorage 폴백)
-  Auth.restore();     // 세션 복원 시도 (새로고침 후에도 로그인 유지)
+  await Auth.restore(); // 토큰 있으면 복원 → _showApp() 내부에서 DB.loadAll() 호출
 })();
 </script>
 </body>
