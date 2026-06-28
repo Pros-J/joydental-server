@@ -207,7 +207,7 @@ app.delete('/api/data', requireAuth, requireAdmin, async (req, res) => {
 
 // 1단계: 인증코드 발송
 app.post('/api/forgot-password', async (req, res) => {
-  if (!mailer) return res.status(503).json({ ok: false, error: '메일 서비스가 설정되지 않았습니다.' });
+  if (!process.env.RESEND_API_KEY) return res.status(503).json({ ok: false, error: '메일 서비스가 설정되지 않았습니다.' });
 
   // 6자리 숫자 코드 생성
   const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -217,8 +217,8 @@ app.post('/api/forgot-password', async (req, res) => {
     await sendResetEmail(code);
     res.json({ ok: true, message: `${ADMIN_EMAIL}로 인증코드를 발송했습니다.` });
   } catch (err) {
-    console.error('메일 발송 실패:', err);
-    res.status(500).json({ ok: false, error: '메일 발송에 실패했습니다. 네이버 설정을 확인하세요.' });
+    console.error('메일 발송 실패:', err.message);
+    res.status(500).json({ ok: false, error: '메일 발송 실패: ' + err.message });
   }
 });
 
