@@ -807,10 +807,16 @@ const Pages = {
     const implantOrders = DB.getImplantOrders().filter(r => inMonth(r.date, y, m));
     const generalOrders = DB.getGeneralOrders().filter(r => inMonth(r.date, y, m));
     const labWork = DB.getLabWork().filter(r => inMonth(r.date, y, m));
+    const fixtures = DB.getFixtures();
+    // 페일 픽스쳐 중 반품 완료된 항목 — 비용 차감용
+    const failReturned = DB.getFixtureUsage().filter(r => inMonth(r.date, y, m) && r.fail && r.return_status === '반품 완료');
+    const failReturnedCost = sum(failReturned, r => { const f = fixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; });
 
     const totalDirect = sum(direct, r => r.amount);
-    const totalImplant = sum(implantOrders, r => r.total);
-    const totalGeneral = sum(generalOrders, r => r.amount);
+    // 반품완료 주문 항목 제외 + 페일 픽스쳐 반품 완료 차감
+    const totalImplant = sum(implantOrders.filter(r => r.item_status !== '반품완료'), r => r.total) - failReturnedCost;
+    // 반품 상태 제외, total_amount 필드 사용 (구형 데이터 amount 호환)
+    const totalGeneral = sum(generalOrders.filter(r => r.status !== '반품'), r => r.total_amount||r.amount||0);
     const totalLab = sum(labWork, r => r.amount);
     const grandTotal = totalDirect + totalImplant + totalGeneral + totalLab;
 
@@ -828,8 +834,8 @@ const Pages = {
     // Recent entries (last 7)
     const allRecent = [
       ...direct.map(r => ({ date: r.date, label: `직접지출 · ${r.category}`, name: r.description, amount: r.amount })),
-      ...implantOrders.map(r => ({ date: r.date, label: '임플란트 입고', name: r.item_name, amount: r.total })),
-      ...generalOrders.map(r => ({ date: r.date, label: '일반 재료', name: r.description, amount: r.amount })),
+      ...implantOrders.filter(r => r.item_status !== '반품완료').map(r => ({ date: r.date, label: '임플란트 입고', name: r.item_name, amount: r.total })),
+      ...generalOrders.filter(r => r.status !== '반품').map(r => ({ date: r.date, label: '일반 재료', name: r.description, amount: r.total_amount||r.amount||0 })),
       ...labWork.map(r => ({ date: r.date, label: `기공[${r.lab_name}]`, name: `${r.patient_name} · ${r.prosthetic_type}`, amount: r.amount })),
     ].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 10);
 
@@ -2338,7 +2344,7 @@ const Pages = {
     const data = DB.getLabWork().filter(r => inMonth(r.date, y, m));
     const total = sum(data, r => r.amount);
     const byLab = {};
-    settings.labs.forEach(l => { byLab[l.name] = data.filter(r => r.lab_name === l.name); });
+    (settings.labs||[]).forEach(l => { byLab[l.name] = data.filter(r => r.lab_name === l.name); });
     const cols = admin ? 9 : 8;
     const totalConfirmed = sum(data.filter(r => r.status === '도착확인'), r => r.amount||0);
 
@@ -2483,9 +2489,13 @@ const Pages = {
     const directByCat = {};
     direct.forEach(r => { directByCat[r.category] = (directByCat[r.category]||0) + r.amount; });
 
-    // Implant orders breakdown
+    // 페일 픽스쳐 반품 완료 차감
+    const failReturned = DB.getFixtureUsage().filter(r => inMonth(r.date, y, m) && r.fail && r.return_status === '반품 완료');
+    const failReturnedCost = sum(failReturned, r => { const f = fixtures.find(x => x.id === r.fixture_id); return (f?.unit_price||0) * r.quantity; });
+
+    // Implant orders breakdown (반품완료 제외)
     const implantByType = {};
-    implantOrders.forEach(r => {
+    implantOrders.filter(r => r.item_status !== '반품완료').forEach(r => {
       const cat = r.item_type === 'fixture' ? '픽스쳐' : (() => {
         const mat = mats.find(x => x.id === r.item_id);
         return mat ? mat.category : '기타';
@@ -2498,8 +2508,10 @@ const Pages = {
     labWork.forEach(r => { labByLab[r.lab_name] = (labByLab[r.lab_name]||0) + r.amount; });
 
     const totalDirect = sum(direct, r => r.amount);
-    const totalImplant = sum(implantOrders, r => r.total);
-    const totalGeneral = sum(generalOrders, r => r.amount);
+    // 반품완료 제외 + 페일 픽스쳐 반품 완료 차감
+    const totalImplant = sum(implantOrders.filter(r => r.item_status !== '반품완료'), r => r.total) - failReturnedCost;
+    // 반품 상태 제외, total_amount 필드 사용
+    const totalGeneral = sum(generalOrders.filter(r => r.status !== '반품'), r => r.total_amount||r.amount||0);
     const totalLab = sum(labWork, r => r.amount);
     const grandTotal = totalDirect + totalImplant + totalGeneral + totalLab;
 
@@ -2515,9 +2527,10 @@ const Pages = {
       <div class="report-row"><span>${k}</span><strong>${fmt.won(v)}</strong></div>`).join('') ||
       `<div class="report-row" style="color:var(--gray-400)"><span>내역 없음</span><strong>-</strong></div>`;
 
-    const generalRows = generalOrders.length
-      ? generalOrders.slice(0,5).map(r => `<div class="report-row"><span>${r.vendor} · ${r.description}</span><strong>${fmt.won(r.amount)}</strong></div>`).join('') +
-        (generalOrders.length > 5 ? `<div class="report-row" style="color:var(--gray-400)"><span>... 외 ${generalOrders.length-5}건</span><strong></strong></div>` : '')
+    const generalActive = generalOrders.filter(r => r.status !== '반품');
+    const generalRows = generalActive.length
+      ? generalActive.slice(0,5).map(r => `<div class="report-row"><span>${r.vendor} · ${r.description}</span><strong>${fmt.won(r.total_amount||r.amount||0)}</strong></div>`).join('') +
+        (generalActive.length > 5 ? `<div class="report-row" style="color:var(--gray-400)"><span>... 외 ${generalActive.length-5}건</span><strong></strong></div>` : '')
       : `<div class="report-row" style="color:var(--gray-400)"><span>내역 없음</span><strong>-</strong></div>`;
 
     document.getElementById('content').innerHTML = `
