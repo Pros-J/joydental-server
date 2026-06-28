@@ -3413,11 +3413,11 @@ const Pages = {
             </select>
             <div id="vendor-cat-hint" style="font-size:11px;color:var(--primary);margin-top:3px">${catDesc[activeCat]||''}</div>
           </div>
-          <div class="form-group"><label>거래처명</label><input type="text" name="name" value="${v?.name||''}" required placeholder="거래처명"></div>
-          <div class="form-group" style="display:flex;align-items:center;padding-top:22px">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+          <div class="form-group" style="grid-column:1/-1"><label>거래처명</label><input type="text" name="name" value="${v?.name||''}" required placeholder="거래처명"></div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;font-weight:600;margin:0">
               <input type="checkbox" id="vendor-online-chk" name="online_order" value="1" ${v?.online_order?'checked':''} onchange="Pages._toggleVendorOnline(this.checked)" style="width:16px;height:16px;accent-color:var(--primary)">
-              온라인 주문
+              온라인 주문 (담당자·연락처 없음)
             </label>
           </div>
           <div class="form-group"><label>담당자명</label><input id="vendor-manager" type="text" name="manager" value="${v?.manager||''}" placeholder="담당자 이름" ${v?.online_order?'disabled':''}></div>
