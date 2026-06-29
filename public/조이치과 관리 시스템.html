@@ -1479,7 +1479,7 @@ const Pages = {
           <td>${f.fixture_type||'-'}</td>
           <td>${f.diameter}mm</td><td>${f.length}mm</td>
           ${admin ? `<td class="text-right">${fmt.won(f.unit_price)}</td>` : ''}
-          <td class="text-center">${f.min_stock||2}</td>
+          <td class="text-center">${f.min_stock ?? 2}</td>
           <td><button class="btn btn-secondary btn-sm" onclick="Pages.editFixtureModal(${f.id})">수정</button>
               <button class="btn btn-danger btn-sm" onclick="Pages.deleteFixture(${f.id})">삭제</button></td>
         </tr>`).join('')
