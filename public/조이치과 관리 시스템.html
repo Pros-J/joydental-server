@@ -1568,10 +1568,10 @@ const Pages = {
           <div class="form-group"><label>제조사</label><select name="company">${coOpts}</select></div>
           <div class="form-group"><label>제품 종류</label><input type="text" name="fixture_type" value="${f?.fixture_type||''}" placeholder="예: TSIII, TSIV, SS II, BL, SLA"></div>
           <div class="form-group"><label>직경 (mm)</label><input type="number" name="diameter" value="${f?.diameter||''}" step="0.1" min="1" required placeholder="예: 3.5"></div>
-          <div class="form-group"><label>길이 (mm)</label><input type="number" name="length" value="${f?.length||''}" step="0.5" min="1" required placeholder="예: 10"></div>
+          <div class="form-group"><label>길이 (mm)</label><input type="number" name="length" value="${f?.length||''}" step="0.1" min="1" required placeholder="예: 10"></div>
           ${Auth.isAdmin() ? `<div class="form-group"><label>단가 (원)</label><input type="number" name="unit_price" value="${f?.unit_price||''}" min="0" step="100" required placeholder="0"></div>` : ''}
           <div class="form-group"><label>현재 재고 (개)</label><input type="number" name="stock" value="${f?.stock||0}" min="0" required></div>
-          <div class="form-group"><label>최소 재고 알림 (개)</label><input type="number" name="min_stock" value="${f?.min_stock||2}" min="0"></div>
+          <div class="form-group"><label>최소 재고 알림 (개)</label><input type="number" name="min_stock" value="${f?.min_stock ?? 2}" min="0" step="1"></div>
         </div>
         <div class="form-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
