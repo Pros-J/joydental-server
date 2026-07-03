@@ -84,6 +84,8 @@ const MIGRATED_ENTITY_SET = new Set(MIGRATED_ENTITIES);
 function validEntity(entity) { return MIGRATED_ENTITY_SET.has(entity); }
 
 // kv_store의 기존 배열 blob을 records 테이블로 1회 이전 (멱등: 이미 이전된 엔티티는 건너뜀)
+// 구버전의 id 중복 발급 버그로 같은 id를 가진 레코드가 이미 섞여 있을 수 있으므로,
+// 충돌하는 레코드는 버리지 않고 새 id를 배정해 데이터 유실 없이 전부 보존한다.
 async function migrateKvToRecords(client) {
   for (const entity of MIGRATED_ENTITIES) {
     const { rows: cnt } = await client.query('SELECT COUNT(*)::int AS c FROM records WHERE entity = $1', [entity]);
@@ -94,13 +96,23 @@ async function migrateKvToRecords(client) {
 
     const arr = kv[0].value;
     let maxId = 0;
+    for (const rec of arr) { if (rec && typeof rec.id === 'number') maxId = Math.max(maxId, rec.id); }
 
+    const usedIds = new Set();
     await client.query('BEGIN');
     try {
+      let dupCount = 0;
       for (const rec of arr) {
         if (rec == null || typeof rec.id !== 'number') continue; // 방어: 손상된 레코드는 건너뜀
-        const { id, ...rest } = rec;
-        maxId = Math.max(maxId, id);
+        const { id: origId, ...rest } = rec;
+        let id = origId;
+        if (usedIds.has(id)) {
+          // 구버전 버그로 이미 같은 id가 중복 발급된 레코드 — 새 id로 재배정해 유실 방지
+          maxId += 1;
+          id = maxId;
+          dupCount++;
+        }
+        usedIds.add(id);
         await client.query(
           `INSERT INTO records (entity, id, data, updated_at)
            VALUES ($1, $2, $3, NOW())
@@ -115,7 +127,7 @@ async function migrateKvToRecords(client) {
         [entity, maxId + 1]
       );
       await client.query('COMMIT');
-      console.log(`✅ ${entity} 레코드 이전 완료 (${arr.length}건, maxId=${maxId})`);
+      console.log(`✅ ${entity} 레코드 이전 완료 (${arr.length}건, maxId=${maxId}, 중복id 재배정=${dupCount}건)`);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err; // 부분 이전을 조용히 넘기지 않고 실패를 드러냄
@@ -416,11 +428,16 @@ app.post('/api/records/:entity/bulk-restore', requireAuth, requireAdmin, async (
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM records WHERE entity = $1', [entity]);
+    // 복원할 데이터 안에 이미 중복된 id가 섞여 있어도(구버전 버그 잔재) 버리지 않고 새 id로 재배정
     let maxId = 0;
+    for (const rec of records) { if (rec && typeof rec.id === 'number') maxId = Math.max(maxId, rec.id); }
+    const usedIds = new Set();
     for (const rec of records) {
       if (rec == null || typeof rec.id !== 'number') continue;
-      const { id, ...rest } = rec;
-      maxId = Math.max(maxId, id);
+      const { id: origId, ...rest } = rec;
+      let id = origId;
+      if (usedIds.has(id)) { maxId += 1; id = maxId; }
+      usedIds.add(id);
       await client.query(
         `INSERT INTO records (entity, id, data, updated_at) VALUES ($1, $2, $3, NOW())
          ON CONFLICT (entity, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
