@@ -384,6 +384,19 @@
 // 서버 없이 로컬에서만 쓸 경우: null (localStorage 전용 모드)
 const SERVER_URL = 'https://joydental-server-production.up.railway.app';
 
+// 레코드 단위 CRUD로 전환된 엔티티 (기존 kv_store 통짜 저장 방식 탈피).
+// dc_settings는 단일 객체이고 하위 배열이 id가 아닌 배열 인덱스로 관리돼 이 목록에서 제외.
+const RECORD_ENTITIES = [
+  'dc_fixtures', 'dc_implant_mats', 'dc_fixture_usage', 'dc_mat_usage',
+  'dc_implant_orders', 'dc_general_orders', 'dc_lab_work', 'dc_direct', 'dc_vendors'
+];
+// 로컬 폴백(서버 없음) 모드에서 nextId()를 재사용하기 위한 접두사 매핑 (기존 dc_id_* 키와 호환)
+const ENTITY_ID_PREFIX = {
+  dc_fixtures: 'fixture', dc_implant_mats: 'mat', dc_fixture_usage: 'fusage',
+  dc_mat_usage: 'musage', dc_implant_orders: 'iorder', dc_general_orders: 'gorder',
+  dc_lab_work: 'lab', dc_direct: 'direct', dc_vendors: 'vendor'
+};
+
 const DB = {
   _cache: {},
   _serverOk: false,
@@ -403,7 +416,7 @@ const DB = {
     try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; }
   },
 
-  // 동기 쓰기 (캐시 즉시 반영) + 비동기 서버 저장
+  // 동기 쓰기 (캐시 즉시 반영) + 비동기 서버 저장 — dc_settings 등 통짜 저장이 여전히 필요한 키 전용
   _set(k, v) {
     this._cache[k] = v;
     localStorage.setItem(k, JSON.stringify(v));
@@ -416,14 +429,72 @@ const DB = {
     }
   },
 
-  // 로그인 후 서버에서 전체 데이터 로드
+  // 캐시 + localStorage만 반영 (네트워크 없음) — 레코드 단위 엔티티의 배열 캐시 미러링 전용.
+  // 여기서 서버에 통짜로 POST하면 지금 고치려는 "동시 편집 시 서로 덮어쓰기" 버그가 재발하므로
+  // 절대 네트워크 호출을 추가하지 않는다. 실제 저장은 createRecord/updateRecord/deleteRecord가 담당.
+  _mirrorLocal(k, v) {
+    this._cache[k] = v;
+    localStorage.setItem(k, JSON.stringify(v));
+  },
+
+  // 레코드 생성 — 서버가 id를 원자적으로 발급 (로컬 폴백 시 기존 nextId 카운터 사용)
+  async createRecord(entity, fields) {
+    if (this._serverOk && SERVER_URL) {
+      const res = await fetch(`${SERVER_URL}/api/records/${entity}`, {
+        method: 'POST', headers: this._authHeaders(), body: JSON.stringify(fields)
+      });
+      if (!res.ok) throw new Error(`생성 실패: HTTP ${res.status}`);
+      const { data } = await res.json();
+      const arr = this._get(entity) || [];
+      arr.push(data);
+      this._mirrorLocal(entity, arr);
+      return data;
+    }
+    const id = this.nextId(ENTITY_ID_PREFIX[entity]);
+    const rec = { id, ...fields };
+    const arr = this._get(entity) || [];
+    arr.push(rec);
+    this._mirrorLocal(entity, arr);
+    return rec;
+  },
+
+  // 레코드 수정 — id 기준 단건 갱신 (배열 전체를 덮어쓰지 않음)
+  async updateRecord(entity, id, fields) {
+    const arr = this._get(entity) || [];
+    const idx = arr.findIndex(x => x.id === id);
+    if (idx < 0) throw new Error(`레코드를 찾을 수 없습니다: ${entity}#${id}`);
+    const merged = { ...arr[idx], ...fields, id };
+    if (this._serverOk && SERVER_URL) {
+      const res = await fetch(`${SERVER_URL}/api/records/${entity}/${id}`, {
+        method: 'PUT', headers: this._authHeaders(), body: JSON.stringify(merged)
+      });
+      if (!res.ok) throw new Error(`수정 실패: HTTP ${res.status}`);
+    }
+    arr[idx] = merged;
+    this._mirrorLocal(entity, arr);
+    return merged;
+  },
+
+  // 레코드 삭제 — id 기준 단건 삭제
+  async deleteRecord(entity, id) {
+    if (this._serverOk && SERVER_URL) {
+      const res = await fetch(`${SERVER_URL}/api/records/${entity}/${id}`, {
+        method: 'DELETE', headers: this._authHeaders()
+      });
+      if (!res.ok) throw new Error(`삭제 실패: HTTP ${res.status}`);
+    }
+    const arr = (this._get(entity) || []).filter(x => x.id !== id);
+    this._mirrorLocal(entity, arr);
+  },
+
+  // 로그인 후 서버에서 전체 데이터 로드 (settings + 9개 레코드 엔티티를 한 번에)
   async loadAll() {
     if (!SERVER_URL) {
       console.log('로컬 모드: localStorage 사용 중');
       return;
     }
     try {
-      const res = await fetch(`${SERVER_URL}/api/data`, {
+      const res = await fetch(`${SERVER_URL}/api/bootstrap`, {
         headers: this._authHeaders(),
         signal: AbortSignal.timeout(8000)
       });
@@ -433,8 +504,10 @@ const DB = {
         return;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const { data } = await res.json();
-      this._cache = data || {};
+      const { settings, records } = await res.json();
+      this._cache = {};
+      if (settings) this._cache['dc_settings'] = settings;
+      RECORD_ENTITIES.forEach(entity => { this._cache[entity] = records?.[entity] || []; });
       this._serverOk = true;
       console.log('✅ 서버 연결 성공 — 데이터 로드 완료');
     } catch (err) {
@@ -446,7 +519,7 @@ const DB = {
     }
   },
 
-  // --- Settings ---
+  // --- Settings --- (레코드 단위 전환 대상 아님, 기존 통짜 방식 유지)
   getSettings() {
     const defaults = {
       labs: [
@@ -480,43 +553,44 @@ const DB = {
   },
   saveSettings(s) { this._set('dc_settings', s); },
 
-  // --- Fixture Items (픽스쳐 마스터) ---
+  // --- Fixture Items (픽스쳐 마스터) --- 배열 캐시 read + 로컬 미러링만 담당 (저장은 createRecord/updateRecord/deleteRecord)
   getFixtures() { return this._get('dc_fixtures') || []; },
-  saveFixtures(d) { this._set('dc_fixtures', d); },
+  saveFixtures(d) { this._mirrorLocal('dc_fixtures', d); },
 
   // --- Implant Material Items ---
   getImplantMaterials() { return this._get('dc_implant_mats') || []; },
-  saveImplantMaterials(d) { this._set('dc_implant_mats', d); },
+  saveImplantMaterials(d) { this._mirrorLocal('dc_implant_mats', d); },
 
   // --- Fixture Usage ---
   getFixtureUsage() { return this._get('dc_fixture_usage') || []; },
-  saveFixtureUsage(d) { this._set('dc_fixture_usage', d); },
+  saveFixtureUsage(d) { this._mirrorLocal('dc_fixture_usage', d); },
 
   // --- Implant Material Usage ---
   getMatUsage() { return this._get('dc_mat_usage') || []; },
-  saveMatUsage(d) { this._set('dc_mat_usage', d); },
+  saveMatUsage(d) { this._mirrorLocal('dc_mat_usage', d); },
 
   // --- Implant Orders (입고) ---
   getImplantOrders() { return this._get('dc_implant_orders') || []; },
-  saveImplantOrders(d) { this._set('dc_implant_orders', d); },
+  saveImplantOrders(d) { this._mirrorLocal('dc_implant_orders', d); },
 
   // --- General Dental Material Orders ---
   getGeneralOrders() { return this._get('dc_general_orders') || []; },
-  saveGeneralOrders(d) { this._set('dc_general_orders', d); },
+  saveGeneralOrders(d) { this._mirrorLocal('dc_general_orders', d); },
 
   // --- Lab Work ---
   getLabWork() { return this._get('dc_lab_work') || []; },
-  saveLabWork(d) { this._set('dc_lab_work', d); },
+  saveLabWork(d) { this._mirrorLocal('dc_lab_work', d); },
 
   // --- Direct Expenses ---
   getDirectExpenses() { return this._get('dc_direct') || []; },
-  saveDirectExpenses(d) { this._set('dc_direct', d); },
+  saveDirectExpenses(d) { this._mirrorLocal('dc_direct', d); },
 
   // --- Vendors ---
-  getVendors() { return this._get('dc_vendors') || []; },
-  saveVendors(d) { this._set('dc_vendors', d); },
+  // sort_order가 있으면 그 순서(드래그로 정렬)를, 없으면 id 순서를 기본값으로 사용
+  getVendors() { return [...(this._get('dc_vendors') || [])].sort((a,b) => (a.sort_order ?? a.id) - (b.sort_order ?? b.id)); },
+  saveVendors(d) { this._mirrorLocal('dc_vendors', d); },
 
-  // --- ID Generator ---
+  // --- ID Generator (로컬 폴백 모드 전용 — 서버 연결 시에는 서버가 id를 발급) ---
   nextId(prefix) {
     const k = 'dc_id_' + prefix;
     const n = (this._get(k) || 0) + 1;
@@ -1081,23 +1155,18 @@ const Pages = {
       </form>
     </div>`);
   },
-  saveDirectExpense(e, editId) {
+  async saveDirectExpense(e, editId) {
     e.preventDefault();
     const f = new FormData(e.target);
-    const data = DB.getDirectExpenses();
-    if (editId) {
-      const idx = data.findIndex(r => r.id === editId);
-      if (idx >= 0) data[idx] = { ...data[idx], date: f.get('date'), category: f.get('category'), vendor: f.get('vendor'), description: f.get('description'), payment: f.get('payment'), amount: +f.get('amount') };
-    } else {
-      data.push({ id: DB.nextId('direct'), date: f.get('date'), category: f.get('category'), vendor: f.get('vendor'), description: f.get('description'), payment: f.get('payment'), amount: +f.get('amount') });
-    }
-    DB.saveDirectExpenses(data);
+    const fields = { date: f.get('date'), category: f.get('category'), vendor: f.get('vendor'), description: f.get('description'), payment: f.get('payment'), amount: +f.get('amount') };
+    if (editId) await DB.updateRecord('dc_direct', editId, fields);
+    else await DB.createRecord('dc_direct', fields);
     closeModal();
     Pages.direct(App.year, App.month);
   },
   deleteDirectExpense(id) {
-    confirm2('이 지출 내역을 삭제하시겠습니까?', () => {
-      DB.saveDirectExpenses(DB.getDirectExpenses().filter(r => r.id !== id));
+    confirm2('이 지출 내역을 삭제하시겠습니까?', async () => {
+      await DB.deleteRecord('dc_direct', id);
       Pages.direct(App.year, App.month);
     });
   },
@@ -1290,8 +1359,11 @@ const Pages = {
   _implantOrders(y, m) {
     const admin = Auth.isAdmin();
     const orders = DB.getImplantOrders().filter(r => inMonth(r.date, y, m));
+    // 구형(단건) 레코드 호환: item_status 없으면 status 필드에서 품목 상태 유추
+    const getIST = r => r.item_status !== undefined ? r.item_status
+      : (r.status === '반품' ? '반품완료' : r.status === '입고확인' ? '입고확인' : '');
     // 품목별 입고확인 합계
-    const totalConfirmed = sum(orders.filter(r => r.item_status === '입고확인'), r => r.total||0);
+    const totalConfirmed = sum(orders.filter(r => getIST(r) === '입고확인'), r => r.total||0);
 
     // order_group_id 기준으로 그룹화
     const groupMap = {};
@@ -1304,7 +1376,9 @@ const Pages = {
 
     const groupBadge = s => s === '주문서 발행 완료'
       ? `<span class="badge" style="background:#ede9fe;color:#7c3aed">주문서 발행 완료</span>`
-      : `<span class="badge badge-orange">주문서 작성</span>`;
+      : s === '입고확인'
+        ? `<span class="badge badge-green">입고확인</span>`
+        : `<span class="badge badge-orange">주문서 작성</span>`;
 
     const itemBadge = ist => {
       if (ist === '입고확인')  return `<span class="badge badge-green" style="font-size:10px">입고확인</span>`;
@@ -1316,7 +1390,8 @@ const Pages = {
     const rows = groups.length
       ? groups.map(g => {
           const st = g.status || '주문서 작성';
-          const isPublished = st === '주문서 발행 완료';
+          // '주문서 작성' 상태가 아니면(발행 완료/입고확인 등) 품목별 입고확인·반품 액션을 사용 가능하게 함
+          const isPublished = st !== '주문서 작성';
           const rowStyle = isPublished ? ' style="background:#f5f3ff"' : '';
           const groupTotal = sum(g.items, i => i.total||0);
 
@@ -1330,7 +1405,7 @@ const Pages = {
               const mat = DB.getImplantMaterials().find(x => x.id === r.item_id);
               if (mat?.spec && !name.includes(mat.spec)) name += ` <span style="color:var(--gray-400);font-size:11px">${mat.spec}</span>`;
             }
-            const ist = r.item_status || '';
+            const ist = getIST(r);
             const itemActions = isPublished
               ? ist === '입고확인'
                 ? `${itemBadge(ist)} <button style="font-size:10px;padding:2px 6px" class="btn btn-secondary btn-sm" onclick="Pages.setItemStatus(${r.id},'')">취소</button>`
@@ -1441,16 +1516,11 @@ const Pages = {
   },
 
   setReturnStatus(id, newStatus) {
-    const data = DB.getFixtureUsage();
-    const rec = data.find(r => r.id === id);
+    const rec = DB.getFixtureUsage().find(r => r.id === id);
     if (!rec) return;
 
-    const doUpdate = () => {
-      const data2 = DB.getFixtureUsage();
-      const rec2 = data2.find(r => r.id === id);
-      if (!rec2) return;
-      rec2.return_status = newStatus;
-      DB.saveFixtureUsage(data2);
+    const doUpdate = async () => {
+      await DB.updateRecord('dc_fixture_usage', id, { return_status: newStatus });
       Pages.implant(App.year, App.month);
     };
 
@@ -1580,23 +1650,23 @@ const Pages = {
       </form>
     </div>`);
   },
-  saveFixture(e, editId) {
+  async saveFixture(e, editId) {
     e.preventDefault();
     const f = new FormData(e.target);
-    const data = DB.getFixtures();
     const getPrice = (existing) => Auth.isAdmin() ? +f.get('unit_price') : (existing || 0);
     const base = { company: f.get('company'), fixture_type: f.get('fixture_type'), diameter: +f.get('diameter'), length: +f.get('length'), stock: +f.get('stock'), min_stock: +f.get('min_stock') };
     if (editId) {
-      const idx = data.findIndex(x => x.id === editId);
-      if (idx>=0) data[idx] = { ...data[idx], ...base, unit_price: getPrice(data[idx].unit_price) };
-    } else { data.push({ id: DB.nextId('fixture'), ...base, unit_price: getPrice(0) }); }
-    DB.saveFixtures(data);
+      const existing = DB.getFixtures().find(x => x.id === editId);
+      await DB.updateRecord('dc_fixtures', editId, { ...base, unit_price: getPrice(existing?.unit_price) });
+    } else {
+      await DB.createRecord('dc_fixtures', { ...base, unit_price: getPrice(0) });
+    }
     closeModal();
     Pages.implant(App.year, App.month);
   },
   deleteFixture(id) {
-    confirm2('이 픽스쳐를 삭제하시겠습니까?', () => {
-      DB.saveFixtures(DB.getFixtures().filter(x => x.id !== id));
+    confirm2('이 픽스쳐를 삭제하시겠습니까?', async () => {
+      await DB.deleteRecord('dc_fixtures', id);
       Pages.implant(App.year, App.month);
     });
   },
@@ -1632,24 +1702,24 @@ const Pages = {
     document.getElementById('mat-stock-group').style.display = show ? '' : 'none';
     document.getElementById('mat-minstock-group').style.display = show ? '' : 'none';
   },
-  saveMat(e, editId) {
+  async saveMat(e, editId) {
     e.preventDefault();
     const f = new FormData(e.target);
     const cat = f.get('category');
-    const data = DB.getImplantMaterials();
     const getPrice = (existing) => Auth.isAdmin() ? +f.get('unit_price') : (existing || 0);
     const base = { category: cat, name: f.get('name'), spec: f.get('spec')||'', vendor: f.get('vendor'), unit: f.get('unit')||'개', stock: isTrackInventory(cat) ? +f.get('stock') : 0, min_stock: +f.get('min_stock')||1 };
     if (editId) {
-      const idx = data.findIndex(x => x.id === editId);
-      if (idx>=0) data[idx] = { ...data[idx], ...base, unit_price: getPrice(data[idx].unit_price) };
-    } else { data.push({ id: DB.nextId('mat'), ...base, unit_price: getPrice(0) }); }
-    DB.saveImplantMaterials(data);
+      const existing = DB.getImplantMaterials().find(x => x.id === editId);
+      await DB.updateRecord('dc_implant_mats', editId, { ...base, unit_price: getPrice(existing?.unit_price) });
+    } else {
+      await DB.createRecord('dc_implant_mats', { ...base, unit_price: getPrice(0) });
+    }
     closeModal();
     Pages.implant(App.year, App.month);
   },
   deleteMat(id) {
-    confirm2('이 재료를 삭제하시겠습니까?', () => {
-      DB.saveImplantMaterials(DB.getImplantMaterials().filter(x => x.id !== id));
+    confirm2('이 재료를 삭제하시겠습니까?', async () => {
+      await DB.deleteRecord('dc_implant_mats', id);
       Pages.implant(App.year, App.month);
     });
   },
@@ -1752,17 +1822,12 @@ const Pages = {
     setTimeout(() => Pages._onUsageItemChange(idx, document.querySelector(`[name="item_key_${idx}"]`)), 0);
   },
 
-  saveUsage(e) {
+  async saveUsage(e) {
     e.preventDefault();
     const f = new FormData(e.target);
     const date = f.get('date');
     const patient_name = f.get('patient_name');
     const patient_no = f.get('patient_no');
-
-    const fixtures = DB.getFixtures();
-    const mats = DB.getImplantMaterials();
-    const fixtureUsage = DB.getFixtureUsage();
-    const matUsage = DB.getMatUsage();
 
     // 재고 검증 먼저
     for (let i = 0; i < Pages._usageRowCount; i++) {
@@ -1774,15 +1839,15 @@ const Pages = {
       const id = +rawId;
       const qty = +(document.querySelector(`[name="qty_${i}"]`)?.value || 1);
       if (type === 'fixture') {
-        const fx = fixtures.find(x => x.id === id);
+        const fx = DB.getFixtures().find(x => x.id === id);
         if (fx && fx.stock < qty) { alert(`재고 부족!\n${fx.company} ${fx.diameter}×${fx.length}mm\n현재 재고: ${fx.stock}개`); return; }
       } else {
-        const mat = mats.find(x => x.id === id);
+        const mat = DB.getImplantMaterials().find(x => x.id === id);
         if (mat && isTrackInventory(mat.category) && mat.stock < qty) { alert(`재고 부족!\n${mat.name}\n현재 재고: ${mat.stock}${mat.unit||'개'}`); return; }
       }
     }
 
-    // 저장
+    // 저장 (같은 품목이 여러 행에 걸쳐 있어도 매 반복마다 최신 캐시를 다시 읽어 재고가 누적 반영됨)
     for (let i = 0; i < Pages._usageRowCount; i++) {
       const sel = document.querySelector(`[name="item_key_${i}"]`);
       if (!sel || !document.getElementById(`urow-${i}`)) continue;
@@ -1796,42 +1861,34 @@ const Pages = {
       const fail = !!(document.querySelector(`[name="fail_${i}"]`)?.checked);
 
       if (type === 'fixture') {
-        const fx = fixtures.find(x => x.id === id);
-        if (fx) { fx.stock -= qty; }
-        fixtureUsage.push({ id: DB.nextId('fusage'), date, patient_name, patient_no, tooth, fixture_id: id, quantity: qty, memo, fail });
+        const fx = DB.getFixtures().find(x => x.id === id);
+        if (fx) await DB.updateRecord('dc_fixtures', fx.id, { stock: fx.stock - qty });
+        await DB.createRecord('dc_fixture_usage', { date, patient_name, patient_no, tooth, fixture_id: id, quantity: qty, memo, fail });
       } else {
-        const mat = mats.find(x => x.id === id);
-        if (mat && isTrackInventory(mat.category)) { mat.stock -= qty; }
-        matUsage.push({ id: DB.nextId('musage'), date, patient_name, patient_no, tooth, mat_id: id, quantity: qty, memo });
+        const mat = DB.getImplantMaterials().find(x => x.id === id);
+        if (mat && isTrackInventory(mat.category)) await DB.updateRecord('dc_implant_mats', mat.id, { stock: mat.stock - qty });
+        await DB.createRecord('dc_mat_usage', { date, patient_name, patient_no, tooth, mat_id: id, quantity: qty, memo });
       }
     }
 
-    DB.saveFixtures(fixtures);
-    DB.saveImplantMaterials(mats);
-    DB.saveFixtureUsage(fixtureUsage);
-    DB.saveMatUsage(matUsage);
     closeModal();
     Pages.implant(App.year, App.month);
   },
   deleteUsage(id, type) {
-    confirm2('사용 기록을 삭제하시겠습니까? (재고는 자동으로 복원됩니다)', () => {
+    confirm2('사용 기록을 삭제하시겠습니까? (재고는 자동으로 복원됩니다)', async () => {
       if (type === 'fixture') {
-        const usage = DB.getFixtureUsage();
-        const rec = usage.find(x => x.id === id);
+        const rec = DB.getFixtureUsage().find(x => x.id === id);
         if (rec) {
-          const fixtures = DB.getFixtures();
-          const fx = fixtures.find(x => x.id === rec.fixture_id);
-          if (fx) { fx.stock += rec.quantity; DB.saveFixtures(fixtures); }
-          DB.saveFixtureUsage(usage.filter(x => x.id !== id));
+          const fx = DB.getFixtures().find(x => x.id === rec.fixture_id);
+          if (fx) await DB.updateRecord('dc_fixtures', fx.id, { stock: fx.stock + rec.quantity });
+          await DB.deleteRecord('dc_fixture_usage', id);
         }
       } else {
-        const usage = DB.getMatUsage();
-        const rec = usage.find(x => x.id === id);
+        const rec = DB.getMatUsage().find(x => x.id === id);
         if (rec) {
-          const mats = DB.getImplantMaterials();
-          const mat = mats.find(x => x.id === rec.mat_id);
-          if (mat && isTrackInventory(mat.category)) { mat.stock += rec.quantity; DB.saveImplantMaterials(mats); }
-          DB.saveMatUsage(usage.filter(x => x.id !== id));
+          const mat = DB.getImplantMaterials().find(x => x.id === rec.mat_id);
+          if (mat && isTrackInventory(mat.category)) await DB.updateRecord('dc_implant_mats', mat.id, { stock: mat.stock + rec.quantity });
+          await DB.deleteRecord('dc_mat_usage', id);
         }
       }
       Pages.implant(App.year, App.month);
@@ -1921,7 +1978,7 @@ const Pages = {
     </div>`);
   },
 
-  saveUsageGroup(e) {
+  async saveUsageGroup(e) {
     e.preventDefault();
     const form = e.target;
     const f = new FormData(form);
@@ -1929,52 +1986,24 @@ const Pages = {
     const newName = f.get('patient_name');
     const newNo = f.get('patient_no');
 
-    const fixtureUsage = DB.getFixtureUsage();
-    const matUsage = DB.getMatUsage();
-    const fixtures = DB.getFixtures();
-    const mats = DB.getImplantMaterials();
-
     const delFix = Pages._editDeleteIds?.fixture || [];
     const delMat = Pages._editDeleteIds?.mat || [];
 
-    // 삭제된 기록 재고 복원
+    // 검증 전용 재고 스냅샷 — 삭제 복원 → 신규 품목 순으로 기존과 동일하게 누적 반영하며 검증한다.
+    // 검증에 실패해 여기서 return하면 아직 아무 것도 서버에 저장하지 않았으므로,
+    // 기존 코드처럼 이 저장 시도 전체가 원자적으로 취소된다.
+    const fxStock = new Map(DB.getFixtures().map(x => [x.id, x.stock]));
+    const matStock = new Map(DB.getImplantMaterials().map(x => [x.id, x.stock]));
     delFix.forEach(id => {
-      const rec = fixtureUsage.find(x => x.id === id);
-      if (rec) { const fx = fixtures.find(x => x.id === rec.fixture_id); if (fx) fx.stock += rec.quantity; }
+      const rec = DB.getFixtureUsage().find(x => x.id === id);
+      if (rec && fxStock.has(rec.fixture_id)) fxStock.set(rec.fixture_id, fxStock.get(rec.fixture_id) + rec.quantity);
     });
     delMat.forEach(id => {
-      const rec = matUsage.find(x => x.id === id);
-      if (rec) { const mat = mats.find(x => x.id === rec.mat_id); if (mat && isTrackInventory(mat.category)) mat.stock += rec.quantity; }
-    });
-    const newFix = fixtureUsage.filter(r => !delFix.includes(r.id));
-    const newMat = matUsage.filter(r => !delMat.includes(r.id));
-
-    // 기존 항목 수정
-    const tbody = document.getElementById('usage-rows-body');
-    tbody.querySelectorAll('[data-etype]').forEach(row => {
-      const etype = row.dataset.etype;
-      const eid = +row.dataset.eid;
-      if (etype === 'fixture') {
-        const rec = newFix.find(x => x.id === eid);
-        if (rec) {
-          rec.date = newDate; rec.patient_name = newName; rec.patient_no = newNo;
-          rec.tooth = f.get('etooth_fixture_' + eid) || '';
-          rec.quantity = +(f.get('eqty_fixture_' + eid) || 1);
-          rec.memo = f.get('ememo_fixture_' + eid) || '';
-          rec.fail = !!form.querySelector('[name="efail_fixture_' + eid + '"]')?.checked;
-        }
-      } else {
-        const rec = newMat.find(x => x.id === eid);
-        if (rec) {
-          rec.date = newDate; rec.patient_name = newName; rec.patient_no = newNo;
-          rec.tooth = f.get('etooth_mat_' + eid) || '';
-          rec.quantity = +(f.get('eqty_mat_' + eid) || 1);
-          rec.memo = f.get('ememo_mat_' + eid) || '';
-        }
-      }
+      const rec = DB.getMatUsage().find(x => x.id === id);
+      if (rec && matStock.has(rec.mat_id)) matStock.set(rec.mat_id, matStock.get(rec.mat_id) + rec.quantity);
     });
 
-    // 새로 추가된 항목 저장
+    const newRows = [];
     for (let i = 0; i < Pages._usageRowCount; i++) {
       const sel = document.querySelector('[name="item_key_' + i + '"]');
       if (!sel || !document.getElementById('urow-' + i)) continue;
@@ -1986,22 +2015,73 @@ const Pages = {
       const memo = document.querySelector('[name="memo_' + i + '"]')?.value || '';
       if (type === 'fixture') {
         const fail = !!document.querySelector('[name="fail_' + i + '"]')?.checked;
-        const fx = fixtures.find(x => x.id === id);
-        if (fx && fx.stock < qty) { alert('재고 부족: ' + fx.company + ' ' + fx.diameter + '×' + fx.length + 'mm'); return; }
-        if (fx) fx.stock -= qty;
-        newFix.push({ id: DB.nextId('fusage'), date: newDate, patient_name: newName, patient_no: newNo, tooth, fixture_id: id, quantity: qty, memo, fail });
+        const fx = DB.getFixtures().find(x => x.id === id);
+        if (fx && fxStock.get(id) < qty) { alert('재고 부족: ' + fx.company + ' ' + fx.diameter + '×' + fx.length + 'mm'); return; }
+        if (fx) fxStock.set(id, fxStock.get(id) - qty);
+        newRows.push({ type: 'fixture', id, qty, tooth, memo, fail });
       } else {
-        const mat = mats.find(x => x.id === id);
-        if (mat && isTrackInventory(mat.category) && mat.stock < qty) { alert('재고 부족: ' + mat.name); return; }
-        if (mat && isTrackInventory(mat.category)) mat.stock -= qty;
-        newMat.push({ id: DB.nextId('musage'), date: newDate, patient_name: newName, patient_no: newNo, tooth, mat_id: id, quantity: qty, memo });
+        const mat = DB.getImplantMaterials().find(x => x.id === id);
+        if (mat && isTrackInventory(mat.category) && matStock.get(id) < qty) { alert('재고 부족: ' + mat.name); return; }
+        if (mat && isTrackInventory(mat.category)) matStock.set(id, matStock.get(id) - qty);
+        newRows.push({ type: 'mat', id, qty, tooth, memo });
       }
     }
 
-    DB.saveFixtures(fixtures);
-    DB.saveImplantMaterials(mats);
-    DB.saveFixtureUsage(newFix);
-    DB.saveMatUsage(newMat);
+    // 검증 통과 — 여기서부터 실제 저장 진행
+    // (a) 명시적으로 제거된 행: 재고 복원 후 삭제
+    for (const id of delFix) {
+      const rec = DB.getFixtureUsage().find(x => x.id === id);
+      if (rec) {
+        const fx = DB.getFixtures().find(x => x.id === rec.fixture_id);
+        if (fx) await DB.updateRecord('dc_fixtures', fx.id, { stock: fx.stock + rec.quantity });
+        await DB.deleteRecord('dc_fixture_usage', id);
+      }
+    }
+    for (const id of delMat) {
+      const rec = DB.getMatUsage().find(x => x.id === id);
+      if (rec) {
+        const mat = DB.getImplantMaterials().find(x => x.id === rec.mat_id);
+        if (mat && isTrackInventory(mat.category)) await DB.updateRecord('dc_implant_mats', mat.id, { stock: mat.stock + rec.quantity });
+        await DB.deleteRecord('dc_mat_usage', id);
+      }
+    }
+
+    // (b) 남아있는 기존 행: 필드만 갱신 (수량이 바뀌어도 재고 델타를 적용하지 않는 기존 동작을 그대로 보존)
+    const tbody = document.getElementById('usage-rows-body');
+    for (const row of tbody.querySelectorAll('[data-etype]')) {
+      const etype = row.dataset.etype;
+      const eid = +row.dataset.eid;
+      if (etype === 'fixture') {
+        await DB.updateRecord('dc_fixture_usage', eid, {
+          date: newDate, patient_name: newName, patient_no: newNo,
+          tooth: f.get('etooth_fixture_' + eid) || '',
+          quantity: +(f.get('eqty_fixture_' + eid) || 1),
+          memo: f.get('ememo_fixture_' + eid) || '',
+          fail: !!form.querySelector('[name="efail_fixture_' + eid + '"]')?.checked
+        });
+      } else {
+        await DB.updateRecord('dc_mat_usage', eid, {
+          date: newDate, patient_name: newName, patient_no: newNo,
+          tooth: f.get('etooth_mat_' + eid) || '',
+          quantity: +(f.get('eqty_mat_' + eid) || 1),
+          memo: f.get('ememo_mat_' + eid) || ''
+        });
+      }
+    }
+
+    // (c) 새로 추가된 행: 재고 차감 후 생성 (재고는 위에서 이미 검증 완료)
+    for (const row of newRows) {
+      if (row.type === 'fixture') {
+        const fx = DB.getFixtures().find(x => x.id === row.id);
+        if (fx) await DB.updateRecord('dc_fixtures', fx.id, { stock: fx.stock - row.qty });
+        await DB.createRecord('dc_fixture_usage', { date: newDate, patient_name: newName, patient_no: newNo, tooth: row.tooth, fixture_id: row.id, quantity: row.qty, memo: row.memo, fail: row.fail });
+      } else {
+        const mat = DB.getImplantMaterials().find(x => x.id === row.id);
+        if (mat && isTrackInventory(mat.category)) await DB.updateRecord('dc_implant_mats', mat.id, { stock: mat.stock - row.qty });
+        await DB.createRecord('dc_mat_usage', { date: newDate, patient_name: newName, patient_no: newNo, tooth: row.tooth, mat_id: row.id, quantity: row.qty, memo: row.memo });
+      }
+    }
+
     closeModal();
     Pages.implant(App.year, App.month);
   },
@@ -2140,7 +2220,7 @@ const Pages = {
       setTimeout(() => Pages._oItemChange(0, document.querySelector('[name="item_key_0"]')), 0);
     }
   },
-  saveImplantOrder(e, editGroupId) {
+  async saveImplantOrder(e, editGroupId) {
     e.preventDefault();
     const f = new FormData(e.target);
     const date   = f.get('date');
@@ -2172,26 +2252,34 @@ const Pages = {
     }
     if (!newItems.length) { alert('품목을 하나 이상 추가해주세요.'); return; }
 
-    let orders = DB.getImplantOrders();
-    const groupId = editGroupId !== null && editGroupId !== undefined ? editGroupId : (Math.max(0, ...orders.map(o => o.order_group_id||0)) + 1);
+    const groupId = editGroupId !== null && editGroupId !== undefined
+      ? editGroupId
+      : (Math.max(0, ...DB.getImplantOrders().map(o => o.order_group_id||0)) + 1);
 
     if (editGroupId !== null && editGroupId !== undefined) {
       // 기존 그룹 삭제 — 품목별 item_status 기준으로 재고 복원
-      const oldGroup = orders.filter(x => (x.order_group_id||x.id) === editGroupId);
-      oldGroup.filter(r => r.item_status === '입고확인').forEach(rec => {
-        if (rec.item_type === 'fixture') { const fxs = DB.getFixtures(); const fx = fxs.find(x=>x.id===rec.item_id); if(fx){fx.stock=Math.max(0,fx.stock-rec.quantity);DB.saveFixtures(fxs);} }
-        else { const ms = DB.getImplantMaterials(); const m = ms.find(x=>x.id===rec.item_id); if(m&&isTrackInventory(m.category)){m.stock=Math.max(0,m.stock-rec.quantity);DB.saveImplantMaterials(ms);} }
-      });
-      orders = orders.filter(x => (x.order_group_id||x.id) !== editGroupId);
+      const oldGroup = DB.getImplantOrders().filter(x => (x.order_group_id||x.id) === editGroupId);
+      for (const rec of oldGroup.filter(r => r.item_status === '입고확인')) {
+        if (rec.item_type === 'fixture') {
+          const fx = DB.getFixtures().find(x=>x.id===rec.item_id);
+          if (fx) await DB.updateRecord('dc_fixtures', fx.id, { stock: Math.max(0, fx.stock - rec.quantity) });
+        } else {
+          const m = DB.getImplantMaterials().find(x=>x.id===rec.item_id);
+          if (m && isTrackInventory(m.category)) await DB.updateRecord('dc_implant_mats', m.id, { stock: Math.max(0, m.stock - rec.quantity) });
+        }
+      }
+      for (const rec of oldGroup) await DB.deleteRecord('dc_implant_orders', rec.id);
     }
 
-    // 새 항목 저장 및 재고 반영
-    // 새 항목은 item_status 없이 저장 (입고확인/반품 신청은 품목별로 별도 처리)
-    newItems.forEach(item => {
-      orders.push({ id: DB.nextId('iorder'), order_group_id: groupId, date, vendor, status, memo, item_status: '', item_type: item.item_type, item_id: item.item_id, item_name: item.item_name, quantity: item.quantity, unit_price: item.unit_price, total: item.total });
-    });
+    // 새 항목 저장 — item_status 없이 저장 (입고확인/반품 신청은 품목별로 별도 처리)
+    for (const item of newItems) {
+      await DB.createRecord('dc_implant_orders', {
+        order_group_id: groupId, date, vendor, status, memo, item_status: '',
+        item_type: item.item_type, item_id: item.item_id, item_name: item.item_name,
+        quantity: item.quantity, unit_price: item.unit_price, total: item.total
+      });
+    }
 
-    DB.saveImplantOrders(orders);
     closeModal();
     Pages.implant(App.year, App.month);
   },
@@ -2201,10 +2289,9 @@ const Pages = {
     const group = orders.filter(x => (x.order_group_id || x.id) === groupId);
     if (!group.length) return;
 
-    const doUpdate = () => {
-      const orders2 = DB.getImplantOrders();
-      orders2.filter(x => (x.order_group_id || x.id) === groupId).forEach(r => { r.status = newStatus; });
-      DB.saveImplantOrders(orders2);
+    const doUpdate = async () => {
+      const group2 = DB.getImplantOrders().filter(x => (x.order_group_id || x.id) === groupId);
+      for (const r of group2) await DB.updateRecord('dc_implant_orders', r.id, { status: newStatus });
       Pages.implant(App.year, App.month);
     };
 
@@ -2240,23 +2327,21 @@ const Pages = {
     const oldItemStatus = rec.item_status || '';
     if (oldItemStatus === newItemStatus) return;
 
-    const doUpdate = () => {
-      const orders2 = DB.getImplantOrders();
-      const rec2 = orders2.find(x => x.id === itemId);
+    const doUpdate = async () => {
+      const rec2 = DB.getImplantOrders().find(x => x.id === itemId);
       if (!rec2) return;
       const wasIn = (rec2.item_status || '') === '입고확인';
       const nowIn = newItemStatus === '입고확인';
       if (wasIn !== nowIn) {
         if (rec2.item_type === 'fixture') {
-          const fxs = DB.getFixtures(); const fx = fxs.find(x => x.id === rec2.item_id);
-          if (fx) { fx.stock = nowIn ? fx.stock + rec2.quantity : Math.max(0, fx.stock - rec2.quantity); DB.saveFixtures(fxs); }
+          const fx = DB.getFixtures().find(x => x.id === rec2.item_id);
+          if (fx) await DB.updateRecord('dc_fixtures', fx.id, { stock: nowIn ? fx.stock + rec2.quantity : Math.max(0, fx.stock - rec2.quantity) });
         } else {
-          const ms = DB.getImplantMaterials(); const m = ms.find(x => x.id === rec2.item_id);
-          if (m && isTrackInventory(m.category)) { m.stock = nowIn ? m.stock + rec2.quantity : Math.max(0, m.stock - rec2.quantity); DB.saveImplantMaterials(ms); }
+          const m = DB.getImplantMaterials().find(x => x.id === rec2.item_id);
+          if (m && isTrackInventory(m.category)) await DB.updateRecord('dc_implant_mats', m.id, { stock: nowIn ? m.stock + rec2.quantity : Math.max(0, m.stock - rec2.quantity) });
         }
       }
-      rec2.item_status = newItemStatus;
-      DB.saveImplantOrders(orders2);
+      await DB.updateRecord('dc_implant_orders', itemId, { item_status: newItemStatus });
       Pages.implant(App.year, App.month);
     };
 
@@ -2284,15 +2369,19 @@ const Pages = {
     const group = orders.filter(x => (x.order_group_id||x.id) === groupId);
     const hasConfirmed = group.some(r => r.item_status === '입고확인');
     const msg = hasConfirmed ? '이 주문서를 삭제하시겠습니까? (입고확인된 품목의 재고가 자동으로 차감됩니다)' : '이 주문서를 삭제하시겠습니까?';
-    confirm2(msg, () => {
-      const orders2 = DB.getImplantOrders();
-      const group2 = orders2.filter(x => (x.order_group_id||x.id) === groupId);
+    confirm2(msg, async () => {
+      const group2 = DB.getImplantOrders().filter(x => (x.order_group_id||x.id) === groupId);
       // 입고확인된 품목만 재고 복원
-      group2.filter(r => r.item_status === '입고확인').forEach(rec => {
-        if (rec.item_type === 'fixture') { const fxs = DB.getFixtures(); const fx = fxs.find(x=>x.id===rec.item_id); if(fx){fx.stock=Math.max(0,fx.stock-rec.quantity);DB.saveFixtures(fxs);} }
-        else { const ms = DB.getImplantMaterials(); const m = ms.find(x=>x.id===rec.item_id); if(m&&isTrackInventory(m.category)){m.stock=Math.max(0,m.stock-rec.quantity);DB.saveImplantMaterials(ms);} }
-      });
-      DB.saveImplantOrders(orders2.filter(x => (x.order_group_id||x.id) !== groupId));
+      for (const rec of group2.filter(r => r.item_status === '입고확인')) {
+        if (rec.item_type === 'fixture') {
+          const fx = DB.getFixtures().find(x=>x.id===rec.item_id);
+          if (fx) await DB.updateRecord('dc_fixtures', fx.id, { stock: Math.max(0, fx.stock - rec.quantity) });
+        } else {
+          const m = DB.getImplantMaterials().find(x=>x.id===rec.item_id);
+          if (m && isTrackInventory(m.category)) await DB.updateRecord('dc_implant_mats', m.id, { stock: Math.max(0, m.stock - rec.quantity) });
+        }
+      }
+      for (const rec of group2) await DB.deleteRecord('dc_implant_orders', rec.id);
       Pages.implant(App.year, App.month);
     });
   },
@@ -2338,7 +2427,7 @@ const Pages = {
       </form>
     </div>`);
   },
-  saveQuickIncoming(e, type, id) {
+  async saveQuickIncoming(e, type, id) {
     e.preventDefault();
     const f = new FormData(e.target);
     const qty = +f.get('quantity');
@@ -2355,9 +2444,7 @@ const Pages = {
       if (mat) itemName = `[${mat.category}] ${mat.name}`;
     }
 
-    const orders = DB.getImplantOrders();
-    orders.push({ id: DB.nextId('iorder'), date: f.get('date'), status: '주문서 작성', item_type: type, item_id: id, item_name: itemName, vendor: f.get('vendor'), quantity: qty, unit_price: unitPrice, total: qty * unitPrice, memo: '' });
-    DB.saveImplantOrders(orders);
+    await DB.createRecord('dc_implant_orders', { date: f.get('date'), status: '주문서 작성', item_type: type, item_id: id, item_name: itemName, vendor: f.get('vendor'), quantity: qty, unit_price: unitPrice, total: qty * unitPrice, memo: '' });
     closeModal();
     Pages.implant(App.year, App.month);
   },
@@ -2499,20 +2586,17 @@ const Pages = {
   },
 
   setGeneralItemStatus(id, newStatus) {
-    const data = DB.getGeneralOrders();
-    const rec = data.find(r => r.id === id);
+    const rec = DB.getGeneralOrders().find(r => r.id === id);
     if (!rec) return;
 
-    const doUpdate = () => {
-      const data2 = DB.getGeneralOrders();
-      const rec2 = data2.find(r => r.id === id);
+    const doUpdate = async () => {
+      const rec2 = DB.getGeneralOrders().find(r => r.id === id);
       if (!rec2) return;
       if (rec2.order_group_id != null) {
-        rec2.item_status = newStatus;
+        await DB.updateRecord('dc_general_orders', id, { item_status: newStatus });
       } else {
-        rec2.status = newStatus === '반품완료' ? '반품' : newStatus === '입고확인' ? '입고확인' : '주문';
+        await DB.updateRecord('dc_general_orders', id, { status: newStatus === '반품완료' ? '반품' : newStatus === '입고확인' ? '입고확인' : '주문' });
       }
-      DB.saveGeneralOrders(data2);
       Pages.general(App.year, App.month);
     };
 
@@ -2533,10 +2617,9 @@ const Pages = {
     const group = data.filter(r => r.order_group_id === gid);
     if (!group.length) return;
 
-    const doUpdate = () => {
-      const data2 = DB.getGeneralOrders();
-      data2.filter(r => r.order_group_id === gid).forEach(r => { r.status = '주문서 발행 완료'; });
-      DB.saveGeneralOrders(data2);
+    const doUpdate = async () => {
+      const group2 = DB.getGeneralOrders().filter(r => r.order_group_id === gid);
+      for (const r of group2) await DB.updateRecord('dc_general_orders', r.id, { status: '주문서 발행 완료' });
       Pages.general(App.year, App.month);
     };
 
@@ -2709,7 +2792,7 @@ const Pages = {
     </div>`);
   },
 
-  saveGeneralGroup(e, editKey) {
+  async saveGeneralGroup(e, editKey) {
     e.preventDefault();
     const f = new FormData(e.target);
     const admin = Auth.isAdmin();
@@ -2735,33 +2818,29 @@ const Pages = {
     }).filter(Boolean);
     if (!newItems.length) { alert('품목 내용을 입력해주세요.'); return; }
 
-    let allOrders = DB.getGeneralOrders();
     let gid;
 
     if (editKey === null) {
-      // new group
-      gid = Math.max(0, ...allOrders.map(o => o.order_group_id || 0)) + 1;
+      // 신규 그룹
+      gid = Math.max(0, ...DB.getGeneralOrders().map(o => o.order_group_id || 0)) + 1;
     } else if (typeof editKey === 'string' && editKey.startsWith('old_')) {
-      // converting old flat record to new group
+      // 구형 단건 레코드를 신규 그룹으로 전환
       const oldId = +editKey.replace('old_', '');
-      allOrders = allOrders.filter(r => r.id !== oldId);
-      gid = Math.max(0, ...allOrders.map(o => o.order_group_id || 0)) + 1;
+      await DB.deleteRecord('dc_general_orders', oldId);
+      gid = Math.max(0, ...DB.getGeneralOrders().map(o => o.order_group_id || 0)) + 1;
     } else {
-      // editing existing group
+      // 기존 그룹 수정 — description으로 매칭해 item_status 보존
       gid = +editKey;
-      // preserve item_status of matched items by description
-      const oldItems = allOrders.filter(r => r.order_group_id === gid);
+      const oldItems = DB.getGeneralOrders().filter(r => r.order_group_id === gid);
       const statusByDesc = {};
       oldItems.forEach(r => { statusByDesc[r.description] = r.item_status || ''; });
-      allOrders = allOrders.filter(r => r.order_group_id !== gid);
       newItems.forEach(it => { it._oldStatus = statusByDesc[it.description] || ''; });
+      for (const r of oldItems) await DB.deleteRecord('dc_general_orders', r.id);
     }
 
-    newItems.forEach(it => {
-      allOrders.push({
-        id: DB.nextId('gorder'),
-        order_group_id: gid,
-        date, vendor, status, memo,
+    for (const it of newItems) {
+      await DB.createRecord('dc_general_orders', {
+        order_group_id: gid, date, vendor, status, memo,
         item_status: it._oldStatus || '',
         description: it.description,
         quantity: it.quantity,
@@ -2769,22 +2848,22 @@ const Pages = {
         total_amount: it.total_amount,
         note: ''
       });
-    });
+    }
 
-    DB.saveGeneralOrders(allOrders);
     closeModal();
     Pages.general(App.year, App.month);
   },
 
   deleteGeneralGroup(gid) {
-    confirm2('이 주문서 전체를 삭제하시겠습니까?', () => {
-      DB.saveGeneralOrders(DB.getGeneralOrders().filter(r => r.order_group_id !== gid));
+    confirm2('이 주문서 전체를 삭제하시겠습니까?', async () => {
+      const group = DB.getGeneralOrders().filter(r => r.order_group_id === gid);
+      for (const r of group) await DB.deleteRecord('dc_general_orders', r.id);
       Pages.general(App.year, App.month);
     });
   },
   deleteGeneralOrder(id) {
-    confirm2('이 주문 기록을 삭제하시겠습니까?', () => {
-      DB.saveGeneralOrders(DB.getGeneralOrders().filter(r => r.id !== id));
+    confirm2('이 주문 기록을 삭제하시겠습니까?', async () => {
+      await DB.deleteRecord('dc_general_orders', id);
       Pages.general(App.year, App.month);
     });
   },
@@ -2900,27 +2979,23 @@ const Pages = {
         </div>
       </form>`;
   },
-  toggleLabStatus(id) {
-    const data = DB.getLabWork();
-    const rec = data.find(r => r.id === id);
+  async toggleLabStatus(id) {
+    const rec = DB.getLabWork().find(r => r.id === id);
     if (!rec) return;
-    rec.status = (rec.status === '도착확인') ? '의뢰' : '도착확인';
-    DB.saveLabWork(data);
+    await DB.updateRecord('dc_lab_work', id, { status: (rec.status === '도착확인') ? '의뢰' : '도착확인' });
     Pages.lab(App.year, App.month);
   },
-  saveLabWork(e, editId) {
+  async saveLabWork(e, editId) {
     e.preventDefault();
     const f = new FormData(e.target);
-    const data = DB.getLabWork();
     const getAmt = (existing) => Auth.isAdmin() ? (+f.get('amount') || 0) : (existing || 0);
     const base = { date: f.get('date'), lab_name: f.get('lab_name'), patient_name: f.get('patient_name'), prosthetic_type: f.get('prosthetic_type'), tooth_numbers: f.get('tooth_numbers'), delivery_date: f.get('delivery_date'), status: f.get('status') || '의뢰', note: f.get('note') };
     if (editId) {
-      const idx = data.findIndex(r => r.id === editId);
-      if (idx >= 0) data[idx] = { ...data[idx], ...base, amount: getAmt(data[idx].amount) };
+      const existing = DB.getLabWork().find(r => r.id === editId);
+      await DB.updateRecord('dc_lab_work', editId, { ...base, amount: getAmt(existing?.amount) });
     } else {
-      data.push({ id: DB.nextId('lab'), ...base, amount: getAmt(0) });
+      await DB.createRecord('dc_lab_work', { ...base, amount: getAmt(0) });
     }
-    DB.saveLabWork(data);
     Pages._labTab = 'list';
     Pages.lab(App.year, App.month);
   },
@@ -2932,8 +3007,8 @@ const Pages = {
       Pages._labAddForm(rec);
   },
   deleteLabWork(id) {
-    confirm2('이 기공 의뢰를 삭제하시겠습니까?', () => {
-      DB.saveLabWork(DB.getLabWork().filter(r => r.id !== id));
+    confirm2('이 기공 의뢰를 삭제하시겠습니까?', async () => {
+      await DB.deleteRecord('dc_lab_work', id);
       Pages.lab(App.year, App.month);
     });
   },
@@ -3241,7 +3316,7 @@ const Pages = {
           el.classList.add('drag-over');
         }
       });
-      el.addEventListener('drop', e => {
+      el.addEventListener('drop', async e => {
         e.preventDefault();
         if (!dragSrc || dragSrc === el || dragSrc.dataset.list !== el.dataset.list) return;
         const list = dragSrc.dataset.list;
@@ -3261,7 +3336,9 @@ const Pages = {
         } else if (list.startsWith('vendors_')) {
           const fromGIdx = parseInt(dragSrc.dataset.gidx);
           const toGIdx   = parseInt(el.dataset.gidx);
-          DB.saveVendors(this._moveArr(DB.getVendors(), fromGIdx, toGIdx));
+          // 거래처는 별도 정렬 컬럼이 없으므로 재배치된 순서를 sort_order 필드로 레코드마다 저장
+          const reordered = this._moveArr(DB.getVendors(), fromGIdx, toGIdx);
+          for (let i = 0; i < reordered.length; i++) await DB.updateRecord('dc_vendors', reordered[i].id, { sort_order: i });
           if (App.page === 'settings') Pages.settings(App.year, App.month); else App.renderCurrentPage();
         }
       });
@@ -3588,32 +3665,38 @@ const Pages = {
     reader.onload = async evt => {
       try {
         const data = JSON.parse(evt.target.result);
-        Object.entries(data).forEach(([k,v]) => {
-          DB._cache[k] = v;
-          localStorage.setItem(k, JSON.stringify(v));
-          // 서버에도 업로드
-          if (DB._serverOk && SERVER_URL) {
-            fetch(`${SERVER_URL}/api/data/${k}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(v)
-            }).catch(() => {});
+        for (const [k, v] of Object.entries(data)) {
+          if (RECORD_ENTITIES.includes(k)) {
+            // 레코드 단위 엔티티: id를 보존한 채로 통째 복원 (기존 id를 다른 레코드가 참조 중일 수 있음)
+            if (DB._serverOk && SERVER_URL) {
+              await fetch(`${SERVER_URL}/api/records/${k}/bulk-restore`, {
+                method: 'POST', headers: DB._authHeaders(), body: JSON.stringify({ records: v })
+              }).catch(() => {});
+            } else {
+              DB._mirrorLocal(k, v);
+            }
+          } else {
+            // dc_settings 등 통짜 저장 방식 유지
+            DB._set(k, v);
           }
-        });
+        }
+        // 서버에서 다시 로드해 캐시를 복원된 상태와 일치시킴
+        await DB.loadAll();
         alert('데이터를 성공적으로 가져왔습니다.');
         App.renderCurrentPage();
       } catch { alert('올바른 JSON 파일이 아닙니다.'); }
     };
     reader.readAsText(file);
   },
-  resetAll() {
+  async resetAll() {
     if (!confirm('모든 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
     // 로컬 초기화
     Object.keys(localStorage).filter(k => k.startsWith('dc_')).forEach(k => localStorage.removeItem(k));
     DB._cache = {};
-    // 서버 초기화
+    // 서버 초기화 (설정 blob + 레코드 단위 엔티티 전체)
     if (DB._serverOk && SERVER_URL) {
-      fetch(`${SERVER_URL}/api/data`, { method: 'DELETE' }).catch(() => {});
+      await fetch(`${SERVER_URL}/api/data`, { method: 'DELETE', headers: DB._authHeaders() }).catch(() => {});
+      await fetch(`${SERVER_URL}/api/records`, { method: 'DELETE', headers: DB._authHeaders() }).catch(() => {});
     }
     alert('초기화 완료');
     App.renderCurrentPage();
@@ -3642,7 +3725,9 @@ const Pages = {
   addVendorModal(editId, defaultCat) {
     const v = editId ? DB.getVendors().find(x => x.id === editId) : null;
     const activeCat = v?.category || defaultCat || '임플란트';
-    const catOpts = this._vendorCats.map(c => `<option value="${c}" ${activeCat===c?'selected':''}>${c}</option>`).join('');
+    // '기타' 분류(직접 지출 거래처)는 원장 탭에서만 노출
+    const visibleCats = Auth.isAdmin() ? this._vendorCats : this._vendorCats.filter(c => c !== '기타');
+    const catOpts = visibleCats.map(c => `<option value="${c}" ${activeCat===c?'selected':''}>${c}</option>`).join('');
     const catDesc = { '임플란트':'임플란트 재료 입고 모달', '일반재료':'일반 재료 주문 모달', '기공소':'기공 의뢰 모달', '기타':'직접 지출 모달' };
     showModal(`<div class="modal" style="max-width:420px">
       <div class="modal-title">${v ? '거래처 수정' : '거래처 추가'}</div>
@@ -3683,26 +3768,19 @@ const Pages = {
     if (mgr) mgr.disabled = checked;
     if (ph)  ph.disabled  = checked;
   },
-  saveVendor(e, editId) {
+  async saveVendor(e, editId) {
     e.preventDefault();
     const f = new FormData(e.target);
-    const vendors = DB.getVendors();
     const online = !!f.get('online_order');
     const item = { category: f.get('category'), name: f.get('name'), online_order: online, manager: online ? '' : (f.get('manager')||''), phone: online ? '' : (f.get('phone')||''), note: f.get('note') };
-    if (editId) {
-      const idx = vendors.findIndex(v => v.id === editId);
-      if (idx >= 0) vendors[idx] = { ...vendors[idx], ...item };
-    } else {
-      const maxId = Math.max(0, ...vendors.map(v => v.id));
-      vendors.push({ id: maxId + 1, ...item });
-    }
-    DB.saveVendors(vendors);
+    if (editId) await DB.updateRecord('dc_vendors', editId, item);
+    else await DB.createRecord('dc_vendors', item);
     closeModal();
     App.renderCurrentPage();
   },
   deleteVendor(id) {
-    confirm2('이 거래처를 삭제하시겠습니까?', () => {
-      DB.saveVendors(DB.getVendors().filter(v => v.id !== id));
+    confirm2('이 거래처를 삭제하시겠습니까?', async () => {
+      await DB.deleteRecord('dc_vendors', id);
       App.renderCurrentPage();
     });
   },
