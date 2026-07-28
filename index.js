@@ -416,7 +416,9 @@ app.delete('/api/records/:entity/:id', requireAuth, async (req, res) => {
   }
 });
 
-// 엔티티 통째 복원 (가져오기 기능 전용, 원장 전용) — 기존 id를 보존한 채로 전체 교체
+// 엔티티 백업 병합 복원 (가져오기 기능 전용, 원장 전용)
+// 기존 레코드는 절대 지우거나 덮어쓰지 않는다 — 백업 시점 이후 실제로 입력된 데이터를
+// 보호하기 위해, 백업에는 있지만 현재 DB에는 없는 id만 추가로 복구한다 (안전한 병합).
 app.post('/api/records/:entity/bulk-restore', requireAuth, requireAdmin, async (req, res) => {
   const { entity } = req.params;
   if (!validEntity(entity)) return res.status(400).json({ ok: false, error: '허용되지 않는 엔티티입니다.' });
@@ -427,32 +429,28 @@ app.post('/api/records/:entity/bulk-restore', requireAuth, requireAdmin, async (
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('DELETE FROM records WHERE entity = $1', [entity]);
-    // 복원할 데이터 안에 이미 중복된 id가 섞여 있어도(구버전 버그 잔재) 버리지 않고 새 id로 재배정
     let maxId = 0;
-    for (const rec of records) { if (rec && typeof rec.id === 'number') maxId = Math.max(maxId, rec.id); }
-    const usedIds = new Set();
+    let addedCount = 0;
     for (const rec of records) {
       if (rec == null || typeof rec.id !== 'number') continue;
-      const { id: origId, ...rest } = rec;
-      let id = origId;
-      if (usedIds.has(id)) { maxId += 1; id = maxId; }
-      usedIds.add(id);
-      await client.query(
+      const { id, ...rest } = rec;
+      maxId = Math.max(maxId, id);
+      const result = await client.query(
         `INSERT INTO records (entity, id, data, updated_at) VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (entity, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+         ON CONFLICT (entity, id) DO NOTHING`,
         [entity, id, JSON.stringify(rest)]
       );
+      if (result.rowCount > 0) addedCount++;
     }
-    // 이 엔티티의 기존 행은 위에서 이미 전부 삭제했으므로, 카운터는 복원된 데이터 기준으로
-    // 그대로 재설정한다 (이전 카운터와 GREATEST 비교할 필요 없음 — 비교 대상 자체가 없음).
+    // 카운터는 절대 낮추지 않고, 백업의 최대 id보다는 항상 크도록만 보정
     await client.query(
       `INSERT INTO record_seq (entity, next_id) VALUES ($1, $2)
-       ON CONFLICT (entity) DO UPDATE SET next_id = EXCLUDED.next_id`,
+       ON CONFLICT (entity) DO UPDATE
+         SET next_id = GREATEST(record_seq.next_id, EXCLUDED.next_id)`,
       [entity, maxId + 1]
     );
     await client.query('COMMIT');
-    res.json({ ok: true });
+    res.json({ ok: true, added: addedCount });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ ok: false, error: err.message });
